@@ -55,7 +55,10 @@ def save_settings(google_key, gemini_key):
 def extract_and_audit(url):
     """Scrapes contact info AND runs the SEO/Tech Audit."""
     if not url or url == 'No Website Found': 
-        return {"Email": "N/A", "Instagram": "N/A", "SSL": "N/A", "Mobile": "N/A", "Pixels": "N/A"}
+        return {
+            "Email": "N/A", "Instagram": "N/A", "Facebook": "N/A", "Twitter": "N/A", 
+            "SSL": "N/A", "Mobile": "N/A", "Pixels": "N/A"
+        }
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
@@ -64,6 +67,8 @@ def extract_and_audit(url):
         
         emails = set(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', html_text))
         ig_links = set([a['href'] for a in soup.find_all('a', href=True) if 'instagram.com' in a['href']])
+        fb_links = set([a['href'] for a in soup.find_all('a', href=True) if 'facebook.com' in a['href']])
+        tw_links = set([a['href'] for a in soup.find_all('a', href=True) if 'twitter.com' in a['href'] or 'x.com' in a['href']])
         
         has_ssl = "Pass" if url.startswith("https") else "Fail"
         has_mobile = "Pass" if soup.find("meta", attrs={"name": "viewport"}) else "Fail"
@@ -72,12 +77,17 @@ def extract_and_audit(url):
         return {
             "Email": list(emails)[0] if emails else "N/A",
             "Instagram": list(ig_links)[0] if ig_links else "N/A",
+            "Facebook": list(fb_links)[0] if fb_links else "N/A",
+            "Twitter": list(tw_links)[0] if tw_links else "N/A",
             "SSL": has_ssl,
             "Mobile": has_mobile,
             "Pixels": has_pixels
         }
     except: 
-        return {"Email": "N/A", "Instagram": "N/A", "SSL": "Error", "Mobile": "Error", "Pixels": "Error"}
+        return {
+            "Email": "N/A", "Instagram": "N/A", "Facebook": "N/A", "Twitter": "N/A", 
+            "SSL": "Error", "Mobile": "Error", "Pixels": "Error"
+        }
 
 def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, ai_api_key):
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key in the settings sidebar."
@@ -157,7 +167,6 @@ with tab1:
         if not api_key or not search_query:
             st.error("⚠️ Please enter your Google API Key and a search query.")
         else:
-            # UPGRADED LOADING EXPERIENCE
             with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
                 st.write(f"Querying Google Maps for: '{search_query}'")
                 url = 'https://places.googleapis.com/v1/places:searchText'
@@ -173,7 +182,7 @@ with tab1:
                     if not res.ok: break
                     data = res.json()
                     
-                    st.write(f"Found batch... running technical audits...")
+                    st.write(f"Found batch... running technical audits & social scraping...")
                     for place in data.get('places', []):
                         if place.get('businessStatus') == 'OPERATIONAL':
                             business_name = place.get('displayName', {}).get('text', 'N/A')
@@ -187,6 +196,8 @@ with tab1:
                                 "Website": website,
                                 "Email": audit_data["Email"],
                                 "Instagram": audit_data["Instagram"],
+                                "Facebook": audit_data["Facebook"],
+                                "Twitter": audit_data["Twitter"],
                                 "Phone": place.get('nationalPhoneNumber', 'N/A'),
                                 "Address": place.get('formattedAddress', 'N/A'),
                                 "Maps Link": place.get('googleMapsUri', 'N/A'),
@@ -204,7 +215,6 @@ with tab1:
                     time.sleep(1)
                 
                 if all_leads:
-                    # Initialize dataframe index so we can update it safely later
                     df = pd.DataFrame(all_leads)
                     st.session_state.master_dataframe = df
                     status.update(label=f"✅ Complete! Audited {len(all_leads)} leads.", state="complete", expanded=False)
@@ -216,7 +226,6 @@ with tab2:
     if st.session_state.master_dataframe is not None:
         df = st.session_state.master_dataframe
         
-        # KPI DASHBOARD UPGRADE
         st.markdown("### 📈 Campaign Overview")
         col1, col2, col3, col4 = st.columns(4)
         total_leads = len(df)
@@ -230,15 +239,15 @@ with tab2:
         col4.metric("Average Rating", avg_rating)
         st.divider()
 
-        # QUICK FILTERS
-        filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels"], horizontal=True)
+        filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels", "No Website"], horizontal=True)
         display_df = df.copy()
         if filter_option == "Missing SSL":
             display_df = display_df[display_df['SSL'] == 'Fail']
         elif filter_option == "Missing Pixels":
             display_df = display_df[display_df['Pixels'] == 'Fail']
+        elif filter_option == "No Website":
+            display_df = display_df[display_df['Website'] == 'No Website Found']
 
-        # BUG FIX: Assign directly, don't wrap in st.dataframe()
         edited_df = st.data_editor(
             display_df, 
             use_container_width=True, 
@@ -247,13 +256,14 @@ with tab2:
                 "Maps Link": st.column_config.LinkColumn(), 
                 "Website": st.column_config.LinkColumn(), 
                 "Instagram": st.column_config.LinkColumn(),
+                "Facebook": st.column_config.LinkColumn(),
+                "Twitter": st.column_config.LinkColumn(),
                 "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?", default=False),
                 "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?", default=False),
                 "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?", default=False)
             }
         )
         
-        # Sync toggles back to the master dataframe
         st.session_state.master_dataframe.update(edited_df)
 
         st.markdown("<br>", unsafe_allow_html=True)
