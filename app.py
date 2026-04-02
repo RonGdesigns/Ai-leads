@@ -45,7 +45,6 @@ st.markdown("""
 CONFIG_FILE = "user_settings.json"
 
 def load_settings():
-    """Loads saved keys from the user's computer if the file exists."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
@@ -55,7 +54,6 @@ def load_settings():
     return {"google_key": "", "gemini_key": ""}
 
 def save_settings(google_key, gemini_key):
-    """Saves the keys to a local file on the user's computer."""
     with open(CONFIG_FILE, 'w') as f:
         json.dump({"google_key": google_key, "gemini_key": gemini_key}, f)
 
@@ -69,11 +67,9 @@ def extract_and_audit(url):
         html_text = response.text
         soup = BeautifulSoup(html_text, 'html.parser')
         
-        # 1. Contact Info
         emails = set(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', html_text))
         ig_links = set([a['href'] for a in soup.find_all('a', href=True) if 'instagram.com' in a['href']])
         
-        # 2. Tech Audit
         has_ssl = "Pass" if url.startswith("https") else "Fail"
         has_mobile = "Pass" if soup.find("meta", attrs={"name": "viewport"}) else "Fail"
         has_pixels = "Pass" if re.search(r'gtm\.js|analytics\.js|gtag|fbevents\.js', html_text, re.I) else "Fail"
@@ -88,15 +84,44 @@ def extract_and_audit(url):
     except: 
         return {"Email": "N/A", "Instagram": "N/A", "SSL": "Error", "Mobile": "Error", "Pixels": "Error"}
 
-def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, ai_api_key):
+def find_decision_maker(business_name, location):
+    """Uses a DuckDuckGo X-Ray search to bypass LinkedIn walls and extract the owner's name."""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        city = location.split(',')[0] if location else "" # Extract just the city to broaden the search
+        
+        # The X-Ray Query: Forces search engine to only look at LinkedIn profiles matching the title
+        query = f'"{business_name}" {city} (Owner OR Founder OR CEO) site:linkedin.com/in/'
+        url = f"https://html.duckduckgo.com/html/?q={query}"
+        
+        res = requests.get(url, headers=headers, timeout=5)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        for a in soup.find_all('a', class_='result__a'):
+            title_text = a.get_text()
+            if 'LinkedIn' in title_text:
+                # LinkedIn titles usually look like: "John Doe - Founder - XYZ Company | LinkedIn"
+                parts = re.split(r'[-|]', title_text)
+                if parts:
+                    potential_name = parts[0].strip()
+                    # Verify it looks like a real name and not the business name
+                    if 2 < len(potential_name) < 25 and not any(x in potential_name.lower() for x in ['company', 'inc', 'llc']):
+                        return potential_name
+        return "Owner"
+    except:
+        return "Owner"
+
+def draft_dynamic_email(business_name, decision_maker, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, ai_api_key):
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key in the settings sidebar."
     try:
         genai.configure(api_key=ai_api_key)
-        # Upgraded to the live Flash model to prevent 404 crashes
         model = genai.GenerativeModel('gemini-2.5-flash') 
         
+        # Dynamically adjust the greeting based on if we found a real name
+        greeting_target = f"{decision_maker}, the owner/leader of {business_name}" if decision_maker != "Owner" else f"the owner/leader of {business_name}"
+        
         prompt = f"""
-        You are a professional {profession}. Write a short, friendly cold email to the owner of {business_name}.
+        You are a professional {profession}. Write a short, friendly cold email to {greeting_target}.
         Their Google rating is {rating}.
         
         I just audited their website and found this:
@@ -168,7 +193,7 @@ with tab1:
         if not api_key or not search_query:
             st.error("⚠️ Please enter your Google Places API Key in the sidebar and a search query.")
         else:
-            with st.spinner(f"Scanning the web for '{search_query}' and running SEO audits..."):
+            with st.spinner(f"Mining Google Maps, Auditing Tech, and Hunting Owners for '{search_query}'..."):
                 url = 'https://places.googleapis.com/v1/places:searchText'
                 headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
                 
@@ -184,26 +209,31 @@ with tab1:
                     
                     for place in data.get('places', []):
                         if place.get('businessStatus') == 'OPERATIONAL':
+                            business_name = place.get('displayName', {}).get('text', 'N/A')
                             website = place.get('websiteUri', 'No Website Found')
-                            # Now pulls contact info AND tech audit data simultaneously
+                            address = place.get('formattedAddress', 'N/A')
+                            
+                            # Run Tech Audit & Name Hunter
                             audit_data = extract_and_audit(website) 
+                            owner_name = find_decision_maker(business_name, address)
                             
                             all_leads.append({
-                                "Name": place.get('displayName', {}).get('text', 'N/A'),
+                                "Name": business_name,
+                                "Decision Maker": owner_name,
                                 "Rating": place.get('rating', 'N/A'),
                                 "Reviews": place.get('userRatingCount', 0),
                                 "Website": website,
                                 "Email": audit_data["Email"],
                                 "Instagram": audit_data["Instagram"],
                                 "Phone": place.get('nationalPhoneNumber', 'N/A'),
-                                "Address": place.get('formattedAddress', 'N/A'),
+                                "Address": address,
                                 "Maps Link": place.get('googleMapsUri', 'N/A'),
                                 "SSL": audit_data["SSL"],
                                 "Mobile": audit_data["Mobile"],
                                 "Pixels": audit_data["Pixels"],
-                                "Pitch SSL": False,     # Default toggle state
-                                "Pitch Mobile": False,  # Default toggle state
-                                "Pitch Pixels": False   # Default toggle state
+                                "Pitch SSL": False,     
+                                "Pitch Mobile": False,  
+                                "Pitch Pixels": False   
                             })
                             if len(all_leads) >= max_results: break
                     
@@ -216,7 +246,7 @@ with tab1:
                     df['Temp_Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0)
                     df = df.sort_values(by=['Temp_Rating', 'Name'], ascending=[False, True]).drop(columns=['Temp_Rating'])
                     st.session_state.master_dataframe = df
-                    st.success(f"✅ Success! Found and audited {len(all_leads)} leads. Go to Step 2 to view them.")
+                    st.success(f"✅ Success! Found, audited, and enriched {len(all_leads)} leads. Go to Step 2 to view them.")
                 else:
                     st.warning("No operational leads found.")
 
@@ -246,12 +276,12 @@ with tab2:
 
         st.caption("Check the 'Pitch' boxes on the right side of the table to instruct the AI on which website errors to mention.")
         
-        # Upgraded to st.data_editor to allow checking/unchecking the Pitch boxes
         edited_df = st.data_editor(
             filtered_df, 
             use_container_width=True, 
             hide_index=True,
             column_config={
+                "Decision Maker": st.column_config.TextColumn(width="medium"),
                 "Maps Link": st.column_config.LinkColumn(), 
                 "Website": st.column_config.LinkColumn(), 
                 "Instagram": st.column_config.LinkColumn(),
@@ -261,7 +291,6 @@ with tab2:
             }
         )
         
-        # Save user toggle changes back to the master dataframe so Tab 3 can read them
         st.session_state.master_dataframe.update(edited_df)
         
         csv_data = edited_df.to_csv(index=False).encode('utf-8')
@@ -293,12 +322,12 @@ with tab3:
         if st.button("Generate Cold Email"):
             lead_info = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == selected_business].iloc[0]
             
-            # Package the audit data for the AI prompt
             audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
             
-            with st.spinner("AI is analyzing the business, reading your toggles, and writing your email..."):
+            with st.spinner(f"AI is analyzing the business, reading your toggles, and writing an email to {lead_info['Decision Maker']}..."):
                 draft = draft_dynamic_email(
                     lead_info['Name'], 
+                    lead_info['Decision Maker'], # Passes the extracted name
                     lead_info['Rating'], 
                     audit_dict, 
                     lead_info['Pitch SSL'], 
