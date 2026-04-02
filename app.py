@@ -7,6 +7,9 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 import json
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(page_title="Outbound AI | Pro", page_icon="🚀", layout="wide")
@@ -47,11 +50,13 @@ def load_settings():
         try:
             with open(CONFIG_FILE, 'r') as f: return json.load(f)
         except: pass
-    return {"google_key": "", "gemini_key": ""}
+    return {"google_key": "", "gemini_key": "", "sender_email": "", "app_password": ""}
 
-def save_settings(google_key, gemini_key):
-    with open(CONFIG_FILE, 'w') as f: json.dump({"google_key": google_key, "gemini_key": gemini_key}, f)
+def save_settings(google_key, gemini_key, sender_email, app_password):
+    with open(CONFIG_FILE, 'w') as f: 
+        json.dump({"google_key": google_key, "gemini_key": gemini_key, "sender_email": sender_email, "app_password": app_password}, f)
 
+@st.cache_data(ttl=86400, show_spinner=False) # CACHE UPGRADE: Saves API costs for 24 hours
 def extract_and_audit(url):
     """Scrapes contact info AND runs the SEO/Tech Audit."""
     if not url or url == 'No Website Found': 
@@ -117,6 +122,27 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
+def send_email(sender, password, recipient, subject, body):
+    """SMTP Engine for sending the email."""
+    if not sender or not password: return False, "Missing Email Credentials in Engine Room."
+    if not recipient or recipient == "N/A": return False, "No valid recipient email address."
+    
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = sender
+        msg['To'] = recipient
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.send_message(msg)
+        server.quit()
+        return True, "Email sent successfully!"
+    except Exception as e:
+        return False, f"SMTP Error: {e}"
+
 if 'master_dataframe' not in st.session_state:
     st.session_state.master_dataframe = None
 
@@ -130,29 +156,29 @@ with st.sidebar:
         st.markdown("""
         **1. Hunt:** Enter a niche and city. The scraper will find local businesses and audit their website tech.
         **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight to the client.
-        **3. Pitch:** Select a business from the dropdown. The AI will write a custom email based on the exact issues you checked off.
+        **3. Pitch:** Select a business. The AI will write a custom email based on the exact issues you checked off, and you can send it directly from the app.
         """)
     
     st.subheader("1. Data Engine")
     api_key = st.text_input("Google Places API Key:", type="password", value=saved_keys.get("google_key", ""))
     st.subheader("2. AI Engine")
     gemini_key = st.text_input("Gemini API Key:", type="password", value=saved_keys.get("gemini_key", ""))
+    st.subheader("3. SMTP Engine (Gmail)")
+    sender_email = st.text_input("Your Gmail Address:", value=saved_keys.get("sender_email", ""))
+    app_password = st.text_input("Google App Password:", type="password", value=saved_keys.get("app_password", ""), help="Must be a 16-character App Password generated from Google Account Security.")
     
-    if st.button("💾 Save my keys"):
-        if api_key and gemini_key:
-            save_settings(api_key, gemini_key)
-            st.toast("✅ Keys securely saved!")
-        else:
-            st.warning("Please enter both keys.")
+    if st.button("💾 Save Settings"):
+        save_settings(api_key, gemini_key, sender_email, app_password)
+        st.toast("✅ Settings securely saved!")
     st.markdown("---")
-    st.caption("🔒 Keys are stored locally on this machine.")
+    st.caption("🔒 Data is stored locally on this machine.")
 
 # --- 3. MAIN HEADER ---
 st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Local B2B Lead Generation & SEO Audit Machine</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Local B2B Lead Generation & Outbound CRM</p>", unsafe_allow_html=True)
 
 # --- 4. THE 3-STEP WORKFLOW (TABS) ---
-tab1, tab2, tab3 = st.tabs(["🔍 1. Hunt (Scraper)", "📊 2. Analyze (Dashboard)", "🤖 3. Pitch (AI Agent)"])
+tab1, tab2, tab3 = st.tabs(["🔍 1. Hunt (Scraper)", "📊 2. Analyze (Dashboard)", "🚀 3. Pitch & Send"])
 
 # --- TAB 1: HUNT ---
 with tab1:
@@ -168,7 +194,7 @@ with tab1:
             st.error("⚠️ Please enter your Google API Key and a search query.")
         else:
             with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
-                st.write(f"Querying Google Maps for: '{search_query}'")
+                st.write(f"Querying Google Maps for: '{search_query}' (Using Cache if available)")
                 url = 'https://places.googleapis.com/v1/places:searchText'
                 headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
                 
@@ -206,7 +232,8 @@ with tab1:
                                 "Pixels": audit_data["Pixels"],
                                 "Pitch SSL": False,     
                                 "Pitch Mobile": False,  
-                                "Pitch Pixels": False   
+                                "Pitch Pixels": False,
+                                "Drafted Email": "" # NEW COLUMN FOR BATCH PROCESS
                             })
                             if len(all_leads) >= max_results: break
                     
@@ -248,8 +275,11 @@ with tab2:
         elif filter_option == "No Website":
             display_df = display_df[display_df['Website'] == 'No Website Found']
 
+        # Removed the 'Drafted Email' column from the data editor view so it doesn't clutter the UI
+        cols_to_show = [c for c in display_df.columns if c != 'Drafted Email']
+        
         edited_df = st.data_editor(
-            display_df, 
+            display_df[cols_to_show], 
             use_container_width=True, 
             hide_index=True,
             column_config={
@@ -264,7 +294,9 @@ with tab2:
             }
         )
         
-        st.session_state.master_dataframe.update(edited_df)
+        # Sync changes back to master df safely
+        for index, row in edited_df.iterrows():
+            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == row['Name'], edited_df.columns] = row.values
 
         st.markdown("<br>", unsafe_allow_html=True)
         csv_data = st.session_state.master_dataframe.to_csv(index=False).encode('utf-8')
@@ -272,7 +304,7 @@ with tab2:
     else:
         st.info("👈 Run the scraper in Step 1 to populate your dashboard.")
 
-# --- TAB 3: PITCH ---
+# --- TAB 3: PITCH & SEND ---
 with tab3:
     if st.session_state.master_dataframe is not None:
         st.markdown("### 🤖 AI Sales Persona")
@@ -287,23 +319,52 @@ with tab3:
             core_offer = st.text_area("Core Offer:", value="Building SEO-optimized websites to drive sales.", help="What is your main value proposition?")
         
         st.divider()
-        selected_business = st.selectbox("Select target to pitch:", st.session_state.master_dataframe['Name'].tolist())
+        st.markdown("### ✉️ Campaign Execution")
         
-        if st.button("Generate Cold Email"):
-            lead_info = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == selected_business].iloc[0]
-            audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
-            
-            with st.spinner("AI is writing your personalized pitch..."):
-                draft = draft_dynamic_email(
-                    lead_info['Name'], 
-                    lead_info['Rating'], 
-                    audit_dict, 
-                    lead_info['Pitch SSL'], 
-                    lead_info['Pitch Mobile'], 
-                    lead_info['Pitch Pixels'], 
-                    user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key
-                )
-                st.toast("✅ Email generated successfully!")
-                st.text_area("Copy Pitch:", value=draft, height=250)
+        target_options = st.session_state.master_dataframe['Name'].tolist()
+        selected_business = st.selectbox("Select target to pitch:", target_options)
+        
+        # Fetch the selected lead's current data
+        lead_idx = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()[0]
+        lead_info = st.session_state.master_dataframe.iloc[lead_idx]
+        current_draft = lead_info['Drafted Email']
+
+        col_gen, col_send = st.columns(2)
+        
+        with col_gen:
+            if st.button("🤖 1. Generate Custom Pitch", use_container_width=True):
+                audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
+                with st.spinner("AI is writing your personalized pitch..."):
+                    draft = draft_dynamic_email(
+                        lead_info['Name'], lead_info['Rating'], audit_dict, 
+                        lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], 
+                        user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key
+                    )
+                    # Save draft to state
+                    st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
+                    st.toast("✅ Email generated successfully!")
+                    st.rerun() # Refresh to show the new draft
+        
+        with col_send:
+            if st.button("🚀 2. Send Email Now", type="primary", use_container_width=True):
+                if not current_draft:
+                    st.error("⚠️ Please generate a pitch first.")
+                elif lead_info['Email'] == "N/A":
+                    st.error("⚠️ No email address scraped for this lead.")
+                else:
+                    with st.spinner("Dispatching via SMTP..."):
+                        subject_line = f"Quick question regarding {lead_info['Name']}'s website"
+                        success, message = send_email(sender_email, app_password, lead_info['Email'], subject_line, current_draft)
+                        if success:
+                            st.success(f"Sent successfully to {lead_info['Email']}!")
+                        else:
+                            st.error(message)
+
+        # Editor space for the user to tweak the email before sending
+        if current_draft:
+            edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
+            if edited_draft != current_draft:
+                 st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = edited_draft
+
     else:
         st.info("👈 Run the scraper in Step 1 before drafting emails.")
