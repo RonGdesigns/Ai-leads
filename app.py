@@ -59,13 +59,14 @@ def extract_and_audit(url):
     except: 
         return {"Email": "N/A", "Instagram": "N/A", "SSL": "Error", "Mobile": "Error", "Pixels": "Error"}
 
-def draft_audit_email(business_name, rating, audit_data, profession, offer, proof, cta, name, ai_api_key):
+def draft_audit_email(business_name, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, ai_api_key):
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key."
     try:
         genai.configure(api_key=ai_api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        # Updated to the live, working model so it won't crash
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # The prompt now includes the tech audit!
+        # The prompt now includes the tech audit AND your manual toggle choices!
         prompt = f"""
         You are a professional {profession}. Write a short, friendly cold email to the owner of {business_name}.
         Their Google rating is {rating}.
@@ -75,7 +76,14 @@ def draft_audit_email(business_name, rating, audit_data, profession, offer, proo
         - Mobile Optimized: {audit_data['Mobile']}
         - Tracking Pixels Installed: {audit_data['Pixels']}
         
-        If they failed any of those checks, gently mention it as a problem hurting their traffic or security. 
+        Important Instructions for this email:
+        - Pitch SSL Issue: {pitch_ssl}
+        - Pitch Mobile Issue: {pitch_mobile}
+        - Pitch Tracking Pixels Issue: {pitch_pixels}
+        
+        If an instruction above is 'True', gently mention it as a problem hurting their traffic or security. 
+        If they are all 'False', just congratulate them on a solid website and pivot straight to your main offer.
+        
         Pitch: {offer}. Build trust: {proof}. Call to action: {cta}. Keep it under 150 words. Sign off as {name}.
         """
         return model.generate_content(prompt).text
@@ -122,18 +130,35 @@ with tab1:
                             "Email": audit["Email"],
                             "SSL Cert": audit["SSL"],
                             "Mobile Ready": audit["Mobile"],
-                            "Pixels": audit["Pixels"]
+                            "Pixels": audit["Pixels"],
+                            "Pitch SSL": False,     # Added default toggle
+                            "Pitch Mobile": False,  # Added default toggle
+                            "Pitch Pixels": False   # Added default toggle
                         })
                         if len(all_leads) >= max_results: break
                 
                 st.session_state.master_dataframe = pd.DataFrame(all_leads)
-                st.success("✅ Extraction and Audit Complete!")
+                st.success("✅ Extraction and Audit Complete! Go to Tab 2 to toggle your pitches.")
 
 with tab2:
     if st.session_state.master_dataframe is not None:
         df = st.session_state.master_dataframe
-        st.dataframe(df, use_container_width=True)
-        st.download_button("⬇️ Export to CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="audited_leads.csv", mime="text/csv")
+        st.markdown("### Interactive Audit Dashboard")
+        st.caption("Check the boxes to select which specific technical issues you want to pitch to each lead.")
+        
+        # Upgraded to st.data_editor to add the interactive checkboxes
+        st.session_state.master_dataframe = st.data_editor(
+            df,
+            column_config={
+                "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?", default=False),
+                "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?", default=False),
+                "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?", default=False),
+                "Website": st.column_config.LinkColumn()
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        st.download_button("⬇️ Export to CSV", data=st.session_state.master_dataframe.to_csv(index=False).encode('utf-8'), file_name="audited_leads.csv", mime="text/csv")
 
 with tab3:
     if st.session_state.master_dataframe is not None:
@@ -146,9 +171,11 @@ with tab3:
         target = st.selectbox("Select Target:", st.session_state.master_dataframe['Name'].tolist())
         
         if st.button("Generate Audit Pitch"):
+            # Extract the specific row the user selected
             row = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == target].iloc[0]
             audit_dict = {"SSL": row['SSL Cert'], "Mobile": row['Mobile Ready'], "Pixels": row['Pixels']}
             
-            with st.spinner("AI is analyzing the audit..."):
-                draft = draft_audit_email(row['Name'], row['Rating'], audit_dict, user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
+            with st.spinner("AI is analyzing the audit and your toggle choices..."):
+                # Passes the toggle values straight to the AI
+                draft = draft_audit_email(row['Name'], row['Rating'], audit_dict, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
                 st.text_area("Pitch:", value=draft, height=250)
