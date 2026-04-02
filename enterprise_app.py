@@ -206,7 +206,7 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
     st.title("⚙️ Engine Room")
     
-    # --- NEW PRIVACY DISCLAIMER ---
+    # --- PRIVACY DISCLAIMER ---
     st.success("🔒 **Privacy First & 100% Local**\n\nYour API keys, emails, and CRM data are saved securely on your local hard drive. Nothing is sent to a central server.")
 
     # --- RESTORED & ELABORATED INSTRUCTIONS ---
@@ -224,12 +224,13 @@ with st.sidebar:
         To make the engine run, you need to plug in your keys below:
 
         **1. Google Places API Key (For Hunting)**
-        * Go to the **Google Cloud Console**.
-        * Create a project, enable the **Places API (New)**, and generate an API key.
+        * Go to the **[Google Cloud Console](https://console.cloud.google.com/)**.
+        * Create a project, set up billing, and enable the **Places API (New)**.
+        * Go to "APIs & Services" > "Credentials" and generate an API key.
 
         **2. Gemini API Key (For AI Pitching)**
-        * Go to **Google AI Studio**.
-        * Click "Get API Key" and generate a free key.
+        * Go to **[Google AI Studio](https://aistudio.google.com/app/apikey)**.
+        * Click "Create API key" and generate a free key.
 
         **3. SMTP & IMAP Servers (For Sending/Tracking)**
         * **Gmail Users:** Leave the defaults (`smtp.gmail.com` and `imap.gmail.com`).
