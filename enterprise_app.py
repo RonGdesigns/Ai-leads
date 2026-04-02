@@ -275,11 +275,48 @@ with tab1:
 
 # --- TAB 2: ANALYZE ---
 with tab2:
-    # Because of the Self-Healing logic in the Sidebar, 
-    # st.session_state.master_dataframe will NO LONGER be None here if the DB has data!
     if st.session_state.master_dataframe is not None:
-        # ... (Keep your Command Center metrics and data_editor code here) ...
-    else:
+        df = st.session_state.master_dataframe
+        
+        st.markdown("### 🎛️ Command Center")
+        
+        # UI: Metric Funnel
+        m1, m2, m3, m4 = st.columns(4)
+        total_leads = len(df)
+        emails_found = len(df[df['Email'] != 'N/A'])
+        m1.metric("Total Prospects", total_leads)
+        
+        # Safe math to prevent division by zero errors
+        match_percentage = int((emails_found / total_leads) * 100) if total_leads > 0 else 0
+        m2.metric("Valid Emails Found", emails_found, f"{match_percentage}% Match")
+        
+        m3.metric("Missing SSL (Hot)", len(df[df['SSL'] == 'Fail']))
+        m4.metric("Missing Pixels", len(df[df['Pixels'] == 'Fail']))
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels", "Valid Emails Only"], horizontal=True)
+        display_df = df.copy()
+        if filter_option == "Missing SSL": display_df = display_df[display_df['SSL'] == 'Fail']
+        elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
+        elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
+
+        # Hide internal columns for cleaner UI
+        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
+        edited_df = st.data_editor(display_df[cols_to_show], use_container_width=True, hide_index=True)
+        
+        # Save edits to the database
+        conn = get_db_conn()
+        for index, row in edited_df.iterrows():
+            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == row['Name'], edited_df.columns] = row.values
+            conn.execute("UPDATE leads SET Pitch_SSL=?, Pitch_Mobile=?, Pitch_Pixels=? WHERE campaign_name=? AND Name=?", 
+                         (int(row['Pitch SSL']), int(row['Pitch Mobile']), int(row['Pitch Pixels']), st.session_state.current_campaign, row['Name']))
+        conn.commit()
+        conn.close()
+
+        csv_data = st.session_state.master_dataframe.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Export Master List to CSV", data=csv_data, file_name="outbound_leads.csv", mime="text/csv")
+    else: 
         st.info("👈 Run the scraper in Step 1 to populate your Command Center.")
 
 # --- TAB 3: PITCH & SEND (Progressive Disclosure) ---
