@@ -209,7 +209,7 @@ st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allo
 st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
 
 # --- 6. TABS ---
-tab1, tab2, tab3, tab4 =f st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"])
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"])
 
 # --- TAB 1: HUNT ---
 with tab1:
