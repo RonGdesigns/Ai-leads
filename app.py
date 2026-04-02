@@ -9,7 +9,7 @@ import json
 import os
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
-st.set_page_config(page_title="Outbound AI", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Outbound AI | Pro", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
@@ -27,9 +27,7 @@ st.markdown("""
         box-shadow: 0 5px 15px rgba(75, 108, 183, 0.4);
         color: white;
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         white-space: pre-wrap;
@@ -47,15 +45,12 @@ CONFIG_FILE = "user_settings.json"
 def load_settings():
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
+            with open(CONFIG_FILE, 'r') as f: return json.load(f)
+        except: pass
     return {"google_key": "", "gemini_key": ""}
 
 def save_settings(google_key, gemini_key):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump({"google_key": google_key, "gemini_key": gemini_key}, f)
+    with open(CONFIG_FILE, 'w') as f: json.dump({"google_key": google_key, "gemini_key": gemini_key}, f)
 
 def extract_and_audit(url):
     """Scrapes contact info AND runs the SEO/Tech Audit."""
@@ -115,12 +110,19 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
 if 'master_dataframe' not in st.session_state:
     st.session_state.master_dataframe = None
 
-# --- 2. SIDEBAR (The Engine Room) ---
+# --- 2. SIDEBAR (The Engine Room & Training) ---
 saved_keys = load_settings()
 
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=50)
     st.title("⚙️ Engine Room")
+    
+    with st.expander("📖 How to use this tool", expanded=False):
+        st.markdown("""
+        **1. Hunt:** Enter a niche and city. The scraper will find local businesses and audit their website tech.
+        **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight to the client.
+        **3. Pitch:** Select a business from the dropdown. The AI will write a custom email based on the exact issues you checked off.
+        """)
+    
     st.subheader("1. Data Engine")
     api_key = st.text_input("Google Places API Key:", type="password", value=saved_keys.get("google_key", ""))
     st.subheader("2. AI Engine")
@@ -129,7 +131,7 @@ with st.sidebar:
     if st.button("💾 Save my keys"):
         if api_key and gemini_key:
             save_settings(api_key, gemini_key)
-            st.success("Keys securely saved!")
+            st.toast("✅ Keys securely saved!")
         else:
             st.warning("Please enter both keys.")
     st.markdown("---")
@@ -147,15 +149,17 @@ with tab1:
     st.markdown("### Target Your Ideal Clients")
     colA, colB = st.columns([3, 1])
     with colA:
-        search_query = st.text_input("Search Query", placeholder="e.g., Roofers in Detroit, MI")
+        search_query = st.text_input("Search Query", placeholder="e.g., Roofers in Detroit, MI", help="Include the niche and the city for the best localized results.")
     with colB:
-        max_results = st.number_input("Max Leads", min_value=1, max_value=100, value=20)
+        max_results = st.number_input("Max Leads", min_value=1, max_value=100, value=20, help="How many businesses should we try to extract?")
         
     if st.button("🚀 Launch Scraper", use_container_width=True):
         if not api_key or not search_query:
             st.error("⚠️ Please enter your Google API Key and a search query.")
         else:
-            with st.spinner(f"Mining Google Maps and Auditing Tech for '{search_query}'..."):
+            # UPGRADED LOADING EXPERIENCE
+            with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
+                st.write(f"Querying Google Maps for: '{search_query}'")
                 url = 'https://places.googleapis.com/v1/places:searchText'
                 headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
                 
@@ -169,6 +173,7 @@ with tab1:
                     if not res.ok: break
                     data = res.json()
                     
+                    st.write(f"Found batch... running technical audits...")
                     for place in data.get('places', []):
                         if place.get('businessStatus') == 'OPERATIONAL':
                             business_name = place.get('displayName', {}).get('text', 'N/A')
@@ -199,33 +204,61 @@ with tab1:
                     time.sleep(1)
                 
                 if all_leads:
+                    # Initialize dataframe index so we can update it safely later
                     df = pd.DataFrame(all_leads)
                     st.session_state.master_dataframe = df
-                    st.success(f"✅ Success! Found and audited {len(all_leads)} leads.")
+                    status.update(label=f"✅ Complete! Audited {len(all_leads)} leads.", state="complete", expanded=False)
                 else:
-                    st.warning("No operational leads found.")
+                    status.update(label="⚠️ No operational leads found.", state="error", expanded=False)
 
 # --- TAB 2: ANALYZE ---
 with tab2:
     if st.session_state.master_dataframe is not None:
         df = st.session_state.master_dataframe
-        st.dataframe(
-            st.data_editor(
-                df, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Maps Link": st.column_config.LinkColumn(), 
-                    "Website": st.column_config.LinkColumn(), 
-                    "Instagram": st.column_config.LinkColumn(),
-                    "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?", default=False),
-                    "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?", default=False),
-                    "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?", default=False)
-                }
-            )
+        
+        # KPI DASHBOARD UPGRADE
+        st.markdown("### 📈 Campaign Overview")
+        col1, col2, col3, col4 = st.columns(4)
+        total_leads = len(df)
+        missing_ssl = len(df[df['SSL'] == 'Fail'])
+        missing_pixels = len(df[df['Pixels'] == 'Fail'])
+        avg_rating = round(df[df['Rating'] != 'N/A']['Rating'].astype(float).mean(), 1) if not df[df['Rating'] != 'N/A'].empty else "N/A"
+
+        col1.metric("Total Leads Audited", total_leads)
+        col2.metric("Missing SSL (Hot Leads)", missing_ssl)
+        col3.metric("Missing Pixels", missing_pixels)
+        col4.metric("Average Rating", avg_rating)
+        st.divider()
+
+        # QUICK FILTERS
+        filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels"], horizontal=True)
+        display_df = df.copy()
+        if filter_option == "Missing SSL":
+            display_df = display_df[display_df['SSL'] == 'Fail']
+        elif filter_option == "Missing Pixels":
+            display_df = display_df[display_df['Pixels'] == 'Fail']
+
+        # BUG FIX: Assign directly, don't wrap in st.dataframe()
+        edited_df = st.data_editor(
+            display_df, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Maps Link": st.column_config.LinkColumn(), 
+                "Website": st.column_config.LinkColumn(), 
+                "Instagram": st.column_config.LinkColumn(),
+                "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?", default=False),
+                "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?", default=False),
+                "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?", default=False)
+            }
         )
-        csv_data = df.to_csv(index=False).encode('utf-8')
-        st.download_button("⬇️ Export to CSV", data=csv_data, file_name="outbound_leads.csv", mime="text/csv")
+        
+        # Sync toggles back to the master dataframe
+        st.session_state.master_dataframe.update(edited_df)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        csv_data = st.session_state.master_dataframe.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Export Master List to CSV", data=csv_data, file_name="outbound_leads.csv", mime="text/csv")
     else:
         st.info("👈 Run the scraper in Step 1 to populate your dashboard.")
 
@@ -236,21 +269,21 @@ with tab3:
         with st.container(border=True):
             col_a, col_b = st.columns(2)
             with col_a:
-                user_profession = st.text_input("Your Profession:", value="Web Developer")
+                user_profession = st.text_input("Your Profession:", value="Web Developer", help="How should the AI introduce you?")
                 your_name = st.text_input("Your Name:", value="Ronald")
             with col_b:
-                social_proof = st.text_input("Past Work:", value="Barber Station Detroit")
+                social_proof = st.text_input("Past Work:", value="Barber Station Detroit", help="Mention a recognizable client to build trust.")
                 call_to_action = st.text_input("CTA:", value="Open to a 5-min chat?")
-            core_offer = st.text_area("Core Offer:", value="Building SEO-optimized websites to drive sales.")
+            core_offer = st.text_area("Core Offer:", value="Building SEO-optimized websites to drive sales.", help="What is your main value proposition?")
         
         st.divider()
-        selected_business = st.selectbox("Select target:", st.session_state.master_dataframe['Name'].tolist())
+        selected_business = st.selectbox("Select target to pitch:", st.session_state.master_dataframe['Name'].tolist())
         
         if st.button("Generate Cold Email"):
             lead_info = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == selected_business].iloc[0]
             audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
             
-            with st.spinner("AI is writing your pitch..."):
+            with st.spinner("AI is writing your personalized pitch..."):
                 draft = draft_dynamic_email(
                     lead_info['Name'], 
                     lead_info['Rating'], 
@@ -260,6 +293,7 @@ with tab3:
                     lead_info['Pitch Pixels'], 
                     user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key
                 )
+                st.toast("✅ Email generated successfully!")
                 st.text_area("Copy Pitch:", value=draft, height=250)
     else:
         st.info("👈 Run the scraper in Step 1 before drafting emails.")
