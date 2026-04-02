@@ -5,14 +5,14 @@ import time
 import re
 from bs4 import BeautifulSoup
 import google.generativeai as genai
+import json
+import os
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(page_title="Outbound AI", page_icon="🚀", layout="wide")
 
-# Injecting Custom CSS for a beautiful, premium look
 st.markdown("""
     <style>
-    /* Gradient styling for the main action buttons */
     .stButton>button {
         background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
         color: white;
@@ -27,7 +27,6 @@ st.markdown("""
         box-shadow: 0 5px 15px rgba(75, 108, 183, 0.4);
         color: white;
     }
-    /* Clean up the tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 24px;
     }
@@ -42,11 +41,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INITIALIZE MEMORY ---
-if 'master_dataframe' not in st.session_state:
-    st.session_state.master_dataframe = None
+# --- 1. MEMORY & CORE FUNCTIONS ---
+CONFIG_FILE = "user_settings.json"
 
-# --- 1. CORE FUNCTIONS (Hidden from UI) ---
+def load_settings():
+    """Loads saved keys from the user's computer if the file exists."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {"google_key": "", "gemini_key": ""}
+
+def save_settings(google_key, gemini_key):
+    """Saves the keys to a local file on the user's computer."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump({"google_key": google_key, "gemini_key": gemini_key}, f)
+
 def extract_contact_info(url):
     if not url or url == 'No Website Found': return {"Email": "N/A", "Instagram": "N/A"}
     try:
@@ -62,26 +74,39 @@ def draft_dynamic_email(business_name, website_status, rating, profession, offer
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key in the settings sidebar."
     try:
         genai.configure(api_key=ai_api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
         prompt = f"You are a professional {profession}. Write a short, friendly cold email to the owner of {business_name}. Their Google rating is {rating}. Their website status is: {website_status}. Pitch: {offer}. Build trust by mentioning your past work with: {proof}. Call to action: {cta}. Keep it under 150 words. Sign off as {name}."
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
+if 'master_dataframe' not in st.session_state:
+    st.session_state.master_dataframe = None
+
 
 # --- 2. SIDEBAR (The Engine Room) ---
+saved_keys = load_settings()
+
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=50) # Placeholder logo
+    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=50)
     st.title("⚙️ Engine Room")
     st.write("Configure your API keys to power the software.")
     
     st.subheader("1. Data Engine")
-    api_key = st.text_input("Google Places API Key:", type="password")
+    api_key = st.text_input("Google Places API Key:", type="password", value=saved_keys.get("google_key", ""))
     
     st.subheader("2. AI Engine")
-    gemini_key = st.text_input("Gemini API Key:", type="password")
+    gemini_key = st.text_input("Gemini API Key:", type="password", value=saved_keys.get("gemini_key", ""))
     
+    st.write("")
+    if st.button("💾 Save my keys"):
+        if api_key and gemini_key:
+            save_settings(api_key, gemini_key)
+            st.success("Keys securely saved for your next session!")
+        else:
+            st.warning("Please enter both keys before saving.")
+            
     st.markdown("---")
-    st.caption("🔒 All keys are stored securely in your local session and are never saved to the cloud.")
+    st.caption("🔒 Keys are stored securely in a local file on this computer. They are never sent to our servers.")
 
 
 # --- 3. MAIN HEADER ---
@@ -102,7 +127,7 @@ with tab1:
     with colB:
         max_results = st.number_input("Max Leads", min_value=1, max_value=100, value=20)
         
-    st.write("") # Spacer
+    st.write("")
     
     if st.button("🚀 Launch Scraper", use_container_width=True):
         if not api_key or not search_query:
@@ -115,7 +140,6 @@ with tab1:
                 all_leads = []
                 page_token = ""
                 
-                # Simplified extraction loop for cleanliness
                 while len(all_leads) < max_results:
                     payload = {'textQuery': search_query, 'pageSize': 20}
                     if page_token: payload['pageToken'] = page_token
