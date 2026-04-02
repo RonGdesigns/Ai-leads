@@ -405,21 +405,10 @@ if 'current_campaign' not in st.session_state: st.session_state.current_campaign
 
 
 # --- 4. SIDEBAR (The Enterprise Engine Room) ---
-
 with st.sidebar:
-
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
-
     st.title("⚙️ Engine Room")
-
     
-
-    # --- PRIVACY DISCLAIMER ---
-
-    st.success("🔒 **Privacy First & 100% Local**\n\nYour API keys, emails, and CRM data are saved securely on your local hard drive. Nothing is sent to a central server.")
-
-
-
     # --- RESTORED & ELABORATED INSTRUCTIONS ---
     with st.expander("📖 How to setup and use this tool", expanded=False):
         st.markdown("""
@@ -457,94 +446,55 @@ with st.sidebar:
         * Search for **"App Passwords"** and generate a new 16-character password specifically for this software. Paste that into the 'Email Password' box.
         """)
 
-
     # Campaign Manager
-
     st.subheader("📁 Campaign Manager")
-
     conn = sqlite3.connect(DB_FILE)
-
     camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
-
     conn.close()
-
     
-
     active_campaign = st.selectbox("Active Campaign:", camp_list)
-
     new_camp = st.text_input("Create New Campaign:", placeholder="e.g., HVAC Texas")
-
     if st.button("➕ Add Campaign") and new_camp:
-
         conn = sqlite3.connect(DB_FILE)
-
         conn.execute("INSERT OR IGNORE INTO campaigns (name) VALUES (?)", (new_camp,))
-
         conn.commit()
-
         conn.close()
-
         st.rerun()
 
-
-
     # Load data if campaign changed
-
     if st.session_state.current_campaign != active_campaign:
-
         st.session_state.current_campaign = active_campaign
-
         df = load_campaign_leads(active_campaign)
-
         st.session_state.master_dataframe = df if not df.empty else None
 
-
-
     with st.expander("🔑 Setup APIs & Email"):
-
         api_key = st.text_input("Google Places API Key:", type="password", value=get_setting("google_key"))
-
         gemini_key = st.text_input("Gemini API Key:", type="password", value=get_setting("gemini_key"))
-
         
-
         st.divider()
-
         st.caption("SMTP (Sending Emails)")
-
         smtp_server = st.text_input("SMTP Server:", value=get_setting("smtp_server", "smtp.gmail.com"))
-
         smtp_port = st.text_input("SMTP Port:", value=get_setting("smtp_port", "587"))
-
         
-
         st.divider()
-
         st.caption("IMAP (Tracking Replies)")
-
         imap_server = st.text_input("IMAP Server:", value=get_setting("imap_server", "imap.gmail.com"))
-
         
-
         st.divider()
-
         sender_email = st.text_input("Email Username:", value=get_setting("sender_email"))
-
         app_password = st.text_input("Email Password/App Key:", type="password", value=get_setting("app_password"))
-
         
-
         if st.button("💾 Save Settings", use_container_width=True):
-
             save_setting("google_key", api_key); save_setting("gemini_key", gemini_key)
-
             save_setting("smtp_server", smtp_server); save_setting("smtp_port", smtp_port)
-
             save_setting("imap_server", imap_server)
-
             save_setting("sender_email", sender_email); save_setting("app_password", app_password)
-
             st.toast("✅ Infrastructure Saved Locally!")
+
+    # --- PRIVACY DISCLAIMER (Moved to Bottom) ---
+    # Using CSS to push this to the bottom of the sidebar visually
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.success("🔒 **Privacy First & 100% Local**\n\nYour API keys, emails, and CRM data are saved securely on your local hard drive. Nothing is sent to a central server.")
 
 
 
