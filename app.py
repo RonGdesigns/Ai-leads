@@ -56,7 +56,7 @@ def save_settings(google_key, gemini_key, sender_email, app_password):
     with open(CONFIG_FILE, 'w') as f: 
         json.dump({"google_key": google_key, "gemini_key": gemini_key, "sender_email": sender_email, "app_password": app_password}, f)
 
-@st.cache_data(ttl=86400, show_spinner=False) # CACHE UPGRADE: Saves API costs for 24 hours
+@st.cache_data(ttl=86400, show_spinner=False)
 def extract_and_audit(url):
     """Scrapes contact info AND runs the SEO/Tech Audit."""
     if not url or url == 'No Website Found': 
@@ -233,7 +233,7 @@ with tab1:
                                 "Pitch SSL": False,     
                                 "Pitch Mobile": False,  
                                 "Pitch Pixels": False,
-                                "Drafted Email": "" # NEW COLUMN FOR BATCH PROCESS
+                                "Drafted Email": ""
                             })
                             if len(all_leads) >= max_results: break
                     
@@ -275,7 +275,6 @@ with tab2:
         elif filter_option == "No Website":
             display_df = display_df[display_df['Website'] == 'No Website Found']
 
-        # Removed the 'Drafted Email' column from the data editor view so it doesn't clutter the UI
         cols_to_show = [c for c in display_df.columns if c != 'Drafted Email']
         
         edited_df = st.data_editor(
@@ -294,7 +293,6 @@ with tab2:
             }
         )
         
-        # Sync changes back to master df safely
         for index, row in edited_df.iterrows():
             st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == row['Name'], edited_df.columns] = row.values
 
@@ -311,12 +309,13 @@ with tab3:
         with st.container(border=True):
             col_a, col_b = st.columns(2)
             with col_a:
-                user_profession = st.text_input("Your Profession:", value="Web Developer", help="How should the AI introduce you?")
-                your_name = st.text_input("Your Name:", value="Ronald")
+                # THESE ARE NOW DEFAULTED TO BLANK
+                user_profession = st.text_input("Your Profession:", value="", help="How should the AI introduce you?")
+                your_name = st.text_input("Your Name:", value="")
             with col_b:
-                social_proof = st.text_input("Past Work:", value="Barber Station Detroit", help="Mention a recognizable client to build trust.")
+                social_proof = st.text_input("Past Work:", value="", help="Mention a recognizable client to build trust.")
                 call_to_action = st.text_input("CTA:", value="Open to a 5-min chat?")
-            core_offer = st.text_area("Core Offer:", value="Building SEO-optimized websites to drive sales.", help="What is your main value proposition?")
+            core_offer = st.text_area("Core Offer:", value="", help="What is your main value proposition?")
         
         st.divider()
         st.markdown("### ✉️ Campaign Execution")
@@ -324,7 +323,6 @@ with tab3:
         target_options = st.session_state.master_dataframe['Name'].tolist()
         selected_business = st.selectbox("Select target to pitch:", target_options)
         
-        # Fetch the selected lead's current data
         lead_idx = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()[0]
         lead_info = st.session_state.master_dataframe.iloc[lead_idx]
         current_draft = lead_info['Drafted Email']
@@ -333,17 +331,20 @@ with tab3:
         
         with col_gen:
             if st.button("🤖 1. Generate Custom Pitch", use_container_width=True):
-                audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
-                with st.spinner("AI is writing your personalized pitch..."):
-                    draft = draft_dynamic_email(
-                        lead_info['Name'], lead_info['Rating'], audit_dict, 
-                        lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], 
-                        user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key
-                    )
-                    # Save draft to state
-                    st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
-                    st.toast("✅ Email generated successfully!")
-                    st.rerun() # Refresh to show the new draft
+                # Simple validation so the prompt doesn't get messed up
+                if not user_profession or not your_name or not core_offer:
+                    st.warning("⚠️ Please fill out your Persona fields first!")
+                else:
+                    audit_dict = {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}
+                    with st.spinner("AI is writing your personalized pitch..."):
+                        draft = draft_dynamic_email(
+                            lead_info['Name'], lead_info['Rating'], audit_dict, 
+                            lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], 
+                            user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key
+                        )
+                        st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
+                        st.toast("✅ Email generated successfully!")
+                        st.rerun() 
         
         with col_send:
             if st.button("🚀 2. Send Email Now", type="primary", use_container_width=True):
@@ -360,7 +361,6 @@ with tab3:
                         else:
                             st.error(message)
 
-        # Editor space for the user to tweak the email before sending
         if current_draft:
             edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
             if edited_draft != current_draft:
