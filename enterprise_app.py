@@ -60,11 +60,19 @@ def load_settings():
         try:
             with open(CONFIG_FILE, 'r') as f: return json.load(f)
         except: pass
-    return {"google_key": "", "gemini_key": "", "sender_email": "", "app_password": ""}
+    return {
+        "google_key": "", "gemini_key": "", 
+        "smtp_server": "smtp.gmail.com", "smtp_port": "587",
+        "sender_email": "", "app_password": ""
+    }
 
-def save_settings(google_key, gemini_key, sender_email, app_password):
+def save_settings(google_key, gemini_key, smtp_server, smtp_port, sender_email, app_password):
     with open(CONFIG_FILE, 'w') as f: 
-        json.dump({"google_key": google_key, "gemini_key": gemini_key, "sender_email": sender_email, "app_password": app_password}, f)
+        json.dump({
+            "google_key": google_key, "gemini_key": gemini_key, 
+            "smtp_server": smtp_server, "smtp_port": smtp_port,
+            "sender_email": sender_email, "app_password": app_password
+        }, f)
 
 def log_campaign(business_name, email_address):
     """Appends successful sends to a permanent local CSV log."""
@@ -142,8 +150,8 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
-def send_email(sender, password, recipient, subject, body):
-    """SMTP Engine for sending the email."""
+def send_email(sender, password, recipient, subject, body, smtp_host, smtp_port):
+    """Dynamic SMTP Engine for sending the email."""
     if not sender or not password: return False, "Missing Email Credentials in Engine Room."
     if not recipient or recipient == "N/A": return False, "No valid recipient email address."
     
@@ -154,7 +162,7 @@ def send_email(sender, password, recipient, subject, body):
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
         
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server = smtplib.SMTP(smtp_host, int(smtp_port))
         server.starttls()
         server.login(sender, password)
         server.send_message(msg)
@@ -182,14 +190,19 @@ with st.sidebar:
     
     st.subheader("1. Data Engine")
     api_key = st.text_input("Google Places API Key:", type="password", value=saved_keys.get("google_key", ""))
+    
     st.subheader("2. AI Engine")
     gemini_key = st.text_input("Gemini API Key:", type="password", value=saved_keys.get("gemini_key", ""))
-    st.subheader("3. SMTP Engine (Gmail)")
-    sender_email = st.text_input("Your Gmail Address:", value=saved_keys.get("sender_email", ""))
-    app_password = st.text_input("Google App Password:", type="password", value=saved_keys.get("app_password", ""), help="Must be a 16-character App Password generated from Google Account Security.")
+    
+    st.subheader("3. SMTP Engine (Provider)")
+    st.caption("Defaults to Gmail, but supports SendGrid, Mailgun, AWS SES, etc.")
+    smtp_server = st.text_input("SMTP Server:", value=saved_keys.get("smtp_server", "smtp.gmail.com"), help="e.g., smtp.sendgrid.net or smtp.gmail.com")
+    smtp_port = st.text_input("SMTP Port:", value=saved_keys.get("smtp_port", "587"))
+    sender_email = st.text_input("Auth Username / Email:", value=saved_keys.get("sender_email", ""))
+    app_password = st.text_input("Auth Password / API Key:", type="password", value=saved_keys.get("app_password", ""))
     
     if st.button("💾 Save Settings"):
-        save_settings(api_key, gemini_key, sender_email, app_password)
+        save_settings(api_key, gemini_key, smtp_server, smtp_port, sender_email, app_password)
         st.toast("✅ Settings securely saved!")
     st.markdown("---")
     st.caption("🔒 Data is stored locally on this machine.")
@@ -209,7 +222,6 @@ with tab1:
     with col1:
         niche = st.text_input("Niche / Industry", placeholder="e.g., Roofers, HVAC, Software")
     with col2:
-        # Added smaller options and updated logic for the clean input UI
         lead_dropdown = st.selectbox("Max Leads", ["5", "10", "20", "50", "100", "250", "Type custom amount..."], index=2)
         if lead_dropdown == "Type custom amount...":
             max_results = st.number_input("Enter exact number:", min_value=1, value=15, step=1)
@@ -398,7 +410,7 @@ with tab3:
                 else:
                     with st.spinner("Dispatching via SMTP..."):
                         subject_line = f"Quick question regarding {lead_info['Name']}'s website"
-                        success, message = send_email(sender_email, app_password, lead_info['Email'], subject_line, current_draft)
+                        success, message = send_email(sender_email, app_password, lead_info['Email'], subject_line, current_draft, smtp_server, smtp_port)
                         if success:
                             st.success(f"Sent successfully to {lead_info['Email']}!")
                             st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = "✅ SENT"
@@ -421,6 +433,9 @@ with tab3:
         # --- BULK EXECUTION ---
         st.markdown("### ⚡ Bulk Execution")
         st.caption("Generate and send emails for your entire list at once. (Emails marked as '✅ SENT' will be skipped).")
+        
+        # Throttle Control for Safety
+        send_delay = st.slider("Throttle (Seconds between emails):", min_value=1, max_value=30, value=3, help="Pacing your mass emails prevents providers from flagging you as a spam bot.")
         
         bulk_col1, bulk_col2 = st.columns(2)
         
@@ -464,7 +479,8 @@ with tab3:
                         status_text.text(f"Dispatching to {row['Email']} ({i+1}/{total})...")
                         subj = f"Quick question regarding {row['Name']}'s website"
                         
-                        success, msg = send_email(sender_email, app_password, row['Email'], subj, row['Drafted Email'])
+                        # Uses Dynamic Provider Configuration
+                        success, msg = send_email(sender_email, app_password, row['Email'], subj, row['Drafted Email'], smtp_server, smtp_port)
                         
                         if success:
                             st.session_state.master_dataframe.at[idx, 'Drafted Email'] = "✅ SENT"
@@ -472,7 +488,7 @@ with tab3:
                             sent_count += 1
                         
                         progress_bar.progress((i + 1) / total)
-                        time.sleep(2) 
+                        time.sleep(send_delay) # Uses the dynamic throttle slider
                     
                     st.success(f"✅ Mass Send Complete: {sent_count} emails dispatched.")
                     time.sleep(2)
