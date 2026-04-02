@@ -42,8 +42,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. MEMORY & CORE FUNCTIONS ---
+# --- 1. MEMORY, LOGGING & CORE FUNCTIONS ---
 CONFIG_FILE = "user_settings.json"
+LOG_FILE = "campaign_logs.csv"
 
 def load_settings():
     if os.path.exists(CONFIG_FILE):
@@ -55,6 +56,16 @@ def load_settings():
 def save_settings(google_key, gemini_key, sender_email, app_password):
     with open(CONFIG_FILE, 'w') as f: 
         json.dump({"google_key": google_key, "gemini_key": gemini_key, "sender_email": sender_email, "app_password": app_password}, f)
+
+def log_campaign(business_name, email_address):
+    """Appends successful sends to a permanent local CSV log."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    new_record = pd.DataFrame([{"Date Sent": timestamp, "Business Name": business_name, "Email Sent To": email_address}])
+    
+    if os.path.exists(LOG_FILE):
+        new_record.to_csv(LOG_FILE, mode='a', header=False, index=False)
+    else:
+        new_record.to_csv(LOG_FILE, mode='w', header=True, index=False)
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def extract_and_audit(url):
@@ -156,7 +167,8 @@ with st.sidebar:
         st.markdown("""
         **1. Hunt:** Enter a niche and city. The scraper will find local businesses and audit their website tech.
         **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight to the client.
-        **3. Pitch:** Select a business. The AI will write a custom email based on the exact issues you checked off, and you can send it directly from the app.
+        **3. Pitch:** Select a business. The AI will write a custom email. Send it directly from the app.
+        **4. Logs:** View the history of every email you've successfully sent.
         """)
     
     st.subheader("1. Data Engine")
@@ -177,8 +189,8 @@ with st.sidebar:
 st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Local B2B Lead Generation & Outbound CRM</p>", unsafe_allow_html=True)
 
-# --- 4. THE 3-STEP WORKFLOW (TABS) ---
-tab1, tab2, tab3 = st.tabs(["🔍 1. Hunt (Scraper)", "📊 2. Analyze (Dashboard)", "🚀 3. Pitch & Send"])
+# --- 4. THE 4-STEP WORKFLOW (TABS) ---
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"])
 
 # --- TAB 1: HUNT ---
 with tab1:
@@ -309,7 +321,6 @@ with tab3:
         with st.container(border=True):
             col_a, col_b = st.columns(2)
             with col_a:
-                # THESE ARE NOW DEFAULTED TO BLANK
                 user_profession = st.text_input("Your Profession:", value="", help="How should the AI introduce you?")
                 your_name = st.text_input("Your Name:", value="")
             with col_b:
@@ -331,7 +342,6 @@ with tab3:
         
         with col_gen:
             if st.button("🤖 1. Generate Custom Pitch", use_container_width=True):
-                # Simple validation so the prompt doesn't get messed up
                 if not user_profession or not your_name or not core_offer:
                     st.warning("⚠️ Please fill out your Persona fields first!")
                 else:
@@ -348,8 +358,8 @@ with tab3:
         
         with col_send:
             if st.button("🚀 2. Send Email Now", type="primary", use_container_width=True):
-                if not current_draft:
-                    st.error("⚠️ Please generate a pitch first.")
+                if not current_draft or current_draft == "✅ SENT":
+                    st.error("⚠️ Please generate a fresh pitch first.")
                 elif lead_info['Email'] == "N/A":
                     st.error("⚠️ No email address scraped for this lead.")
                 else:
@@ -358,13 +368,41 @@ with tab3:
                         success, message = send_email(sender_email, app_password, lead_info['Email'], subject_line, current_draft)
                         if success:
                             st.success(f"Sent successfully to {lead_info['Email']}!")
+                            # Update visual status and log to CSV
+                            st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = "✅ SENT"
+                            log_campaign(lead_info['Name'], lead_info['Email'])
+                            time.sleep(1.5)
+                            st.rerun()
                         else:
                             st.error(message)
 
-        if current_draft:
+        if current_draft and current_draft != "✅ SENT":
             edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
             if edited_draft != current_draft:
                  st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = edited_draft
+        elif current_draft == "✅ SENT":
+            st.success("✅ This email has been sent and logged!")
 
     else:
         st.info("👈 Run the scraper in Step 1 before drafting emails.")
+
+# --- TAB 4: CAMPAIGN LOGS ---
+with tab4:
+    st.markdown("### 📜 Campaign History")
+    st.caption("A permanent record of every pitch you have successfully sent.")
+    
+    if os.path.exists(LOG_FILE):
+        logs_df = pd.read_csv(LOG_FILE)
+        
+        # Display high-level metrics
+        st.metric("Total Emails Sent", len(logs_df))
+        st.divider()
+        
+        # Display the interactive table
+        st.dataframe(logs_df, use_container_width=True, hide_index=True)
+        
+        # Export button
+        csv_logs = logs_df.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Export Full History to CSV", data=csv_logs, file_name="campaign_history.csv", mime="text/csv")
+    else:
+        st.info("No emails have been sent yet. Once you dispatch a pitch, your history will appear here.")
