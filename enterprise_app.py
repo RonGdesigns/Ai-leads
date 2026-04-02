@@ -182,7 +182,7 @@ with st.sidebar:
     
     with st.expander("📖 How to use this tool", expanded=False):
         st.markdown("""
-        **1. Hunt:** Enter a niche and city. The scraper will find local businesses and audit their website tech.
+        **1. Hunt:** Enter a niche and city/state. The scraper will find local businesses and audit their website tech.
         **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight to the client.
         **3. Pitch:** Select a single business, OR use the Bulk Actions to generate and send emails to everyone at once.
         **4. Logs:** View the history of every email you've successfully sent.
@@ -234,7 +234,8 @@ with tab1:
         is_international = st.checkbox("🌍 International")
         
     with col3:
-        city = st.text_input("City", placeholder="e.g., Detroit")
+        # Made City optional
+        city = st.text_input("City (Optional)", placeholder="e.g., Detroit")
         
     with col4:
         if is_international:
@@ -245,12 +246,16 @@ with tab1:
     if st.button("🚀 Launch Scraper", use_container_width=True):
         if not api_key:
             st.error("⚠️ Please enter your Google Places API Key in the Engine Room.")
-        elif not niche or not city or not region:
-            st.warning("⚠️ Please fill out the Niche, City, and State/Country fields.")
+        elif not niche or not region: # Region is required, City is not
+            st.warning("⚠️ Please fill out at least the Niche and State/Country fields.")
         else:
-            search_query = f"{niche} in {city}, {region}"
+            # Dynamically build the search query
+            if city:
+                search_query = f"{niche} in {city}, {region}"
+            else:
+                search_query = f"{niche} in {region}"
             
-            with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
+            with st.status(f"🚀 Launching Scraper Engine...", expanded=True) as status:
                 st.write(f"Querying Google Maps for: '{search_query}' (Using Cache if available)")
                 url = 'https://places.googleapis.com/v1/places:searchText'
                 headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
