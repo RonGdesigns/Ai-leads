@@ -299,30 +299,61 @@ with tab1:
                 
                 st.write("3️⃣ Processing and Saving to Database...")
                 conn = get_db_conn()
+                
+                # Define the SQL schema structure ONCE
+                sample_keys = [
+                    "campaign_name", "Name", "Rating", "Reviews", "Website", "Email", 
+                    "Instagram", "Facebook", "Twitter", "Phone", "Address", "Maps_Link", 
+                    "SSL", "Mobile", "Pixels", "Pitch_SSL", "Pitch_Mobile", "Pitch_Pixels", 
+                    "Drafted_Email", "step_number", "last_contacted"
+                ]
+                cols = ", ".join(sample_keys)
+                places = ", ".join(["?"] * len(sample_keys))
+                sql = f"INSERT INTO leads ({cols}) VALUES ({places})"
+                
+                # Batch all 100+ leads into memory first
+                batch_data = []
                 for i, place in enumerate(raw_places):
                     audit = audit_results[i]
-                    lead_obj = {
-                        "campaign_name": st.session_state.current_campaign,
-                        "Name": place.get('displayName', {}).get('text', 'N/A'), "Rating": str(place.get('rating', 'N/A')), 
-                        "Reviews": int(place.get('userRatingCount', 0)), "Website": audit["Website"], "Email": audit["Email"], 
-                        "Instagram": audit["Instagram"], "Facebook": audit["Facebook"], "Twitter": audit["Twitter"],
-                        "Phone": place.get('nationalPhoneNumber', 'N/A'), "Address": place.get('formattedAddress', 'N/A'),
-                        "Maps_Link": place.get('googleMapsUri', 'N/A'), "SSL": audit["SSL"], "Mobile": audit["Mobile"], 
-                        "Pixels": audit["Pixels"], "Pitch_SSL": False, "Pitch_Mobile": False, "Pitch_Pixels": False, "Drafted_Email": "",
-                        "step_number": 1, "last_contacted": ""
-                    }
                     
-                    cols = ", ".join(lead_obj.keys())
-                    places = ", ".join(["?"] * len(lead_obj))
-                    sql = f"INSERT INTO leads ({cols}) VALUES ({places})"
-                    conn.execute(sql, tuple(lead_obj.values()))
+                    # Safely extract Name (sometimes Google returns None or a weird dict)
+                    display_name = place.get('displayName', {})
+                    biz_name = display_name.get('text', 'N/A') if isinstance(display_name, dict) else str(display_name)
+                    
+                    # Strict Type Casting (Bulletproofs against weird API responses)
+                    lead_row = (
+                        str(st.session_state.current_campaign),  # campaign_name
+                        str(biz_name),                           # Name
+                        str(place.get('rating', 'N/A')),         # Rating
+                        int(place.get('userRatingCount', 0)),    # Reviews
+                        str(audit.get("Website", "N/A")),        # Website
+                        str(audit.get("Email", "N/A")),          # Email
+                        str(audit.get("Instagram", "N/A")),      # Instagram
+                        str(audit.get("Facebook", "N/A")),       # Facebook
+                        str(audit.get("Twitter", "N/A")),        # Twitter
+                        str(place.get('nationalPhoneNumber', 'N/A')), # Phone
+                        str(place.get('formattedAddress', 'N/A')),    # Address
+                        str(place.get('googleMapsUri', 'N/A')),       # Maps_Link
+                        str(audit.get("SSL", "N/A")),            # SSL
+                        str(audit.get("Mobile", "N/A")),         # Mobile
+                        str(audit.get("Pixels", "N/A")),         # Pixels
+                        False, False, False, "", 1, ""           # Booleans & Defaults
+                    )
+                    batch_data.append(lead_row)
                 
-                conn.commit()
-                conn.close()
+                # Execute ONE massive bulk transaction (Lock-Proof)
+                try:
+                    conn.executemany(sql, batch_data)
+                    conn.commit()
+                except Exception as e:
+                    st.error(f"Database Write Error: {e}")
+                finally:
+                    conn.close()
                 
+                # Refresh UI
                 df = load_campaign_leads(st.session_state.current_campaign)
                 st.session_state.master_dataframe = df if not df.empty else None
-                status.update(label=f"✅ Async Extraction Complete. Saved {len(raw_places)} leads.", state="complete")
+                status.update(label=f"✅ Async Extraction Complete. Saved {len(batch_data)} leads.", state="complete")
 
 # --- TAB 2: ANALYZE (The Command Center UI) ---
 with tab2:
