@@ -194,17 +194,43 @@ tab1, tab2, tab3, tab4 = st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pi
 
 # --- TAB 1: HUNT ---
 with tab1:
-    st.markdown("### Target Your Ideal Clients")
-    colA, colB = st.columns([3, 1])
-    with colA:
-        search_query = st.text_input("Search Query", placeholder="e.g., Roofers in Detroit, MI", help="Include the niche and the city for the best localized results.")
-    with colB:
-        max_results = st.number_input("Max Leads", min_value=1, max_value=100, value=20, help="How many businesses should we try to extract?")
+    st.markdown("### 🎯 Target Your Ideal Clients")
+    
+    # UI Layout Upgrades: Niche & Volume
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        niche = st.text_input("Niche / Industry", placeholder="e.g., Roofers, HVAC, Software")
+    with col2:
+        lead_dropdown = st.selectbox("Max Leads", ["20", "50", "100", "250", "Custom amount..."])
+        if lead_dropdown == "Custom amount...":
+            max_results = st.number_input("Type exact amount:", min_value=1, value=75)
+        else:
+            max_results = int(lead_dropdown)
+            
+    # UI Layout Upgrades: Location
+    col3, col4, col5 = st.columns([2, 2, 1])
+    with col5:
+        st.markdown("<br>", unsafe_allow_html=True) # Adds vertical padding to align the checkbox with text inputs
+        is_international = st.checkbox("🌍 International")
+        
+    with col3:
+        city = st.text_input("City", placeholder="e.g., Detroit")
+        
+    with col4:
+        if is_international:
+            region = st.text_input("Country", placeholder="e.g., United Kingdom")
+        else:
+            region = st.text_input("State", placeholder="e.g., MI")
         
     if st.button("🚀 Launch Scraper", use_container_width=True):
-        if not api_key or not search_query:
-            st.error("⚠️ Please enter your Google API Key and a search query.")
+        if not api_key:
+            st.error("⚠️ Please enter your Google Places API Key in the Engine Room.")
+        elif not niche or not city or not region:
+            st.warning("⚠️ Please fill out the Niche, City, and State/Country fields.")
         else:
+            # Construct the clean search query
+            search_query = f"{niche} in {city}, {region}"
+            
             with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
                 st.write(f"Querying Google Maps for: '{search_query}' (Using Cache if available)")
                 url = 'https://places.googleapis.com/v1/places:searchText'
@@ -431,7 +457,6 @@ with tab3:
                         status_text.text(f"Dispatching to {row['Email']} ({i+1}/{total})...")
                         subj = f"Quick question regarding {row['Name']}'s website"
                         
-                        # Uses standard Gmail SMTP configuration
                         success, msg = send_email(sender_email, app_password, row['Email'], subj, row['Drafted Email'])
                         
                         if success:
