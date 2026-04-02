@@ -39,6 +39,15 @@ st.markdown("""
         padding-top: 10px;
         padding-bottom: 10px;
     }
+    /* Hide the ugly plus/minus arrows on number inputs */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+    }
+    input[type=number] {
+        -moz-appearance: textfield;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -196,21 +205,20 @@ tab1, tab2, tab3, tab4 = st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pi
 with tab1:
     st.markdown("### 🎯 Target Your Ideal Clients")
     
-    # UI Layout Upgrades: Niche & Volume
     col1, col2 = st.columns([3, 1])
     with col1:
         niche = st.text_input("Niche / Industry", placeholder="e.g., Roofers, HVAC, Software")
     with col2:
-        lead_dropdown = st.selectbox("Max Leads", ["20", "50", "100", "250", "Custom amount..."])
-        if lead_dropdown == "Custom amount...":
-            max_results = st.number_input("Type exact amount:", min_value=1, value=75)
+        # Added smaller options and updated logic for the clean input UI
+        lead_dropdown = st.selectbox("Max Leads", ["5", "10", "20", "50", "100", "250", "Type custom amount..."], index=2)
+        if lead_dropdown == "Type custom amount...":
+            max_results = st.number_input("Enter exact number:", min_value=1, value=15, step=1)
         else:
             max_results = int(lead_dropdown)
             
-    # UI Layout Upgrades: Location
     col3, col4, col5 = st.columns([2, 2, 1])
     with col5:
-        st.markdown("<br>", unsafe_allow_html=True) # Adds vertical padding to align the checkbox with text inputs
+        st.markdown("<br>", unsafe_allow_html=True) 
         is_international = st.checkbox("🌍 International")
         
     with col3:
@@ -228,7 +236,6 @@ with tab1:
         elif not niche or not city or not region:
             st.warning("⚠️ Please fill out the Niche, City, and State/Country fields.")
         else:
-            # Construct the clean search query
             search_query = f"{niche} in {city}, {region}"
             
             with st.status("🚀 Launching Scraper Engine...", expanded=True) as status:
@@ -465,7 +472,7 @@ with tab3:
                             sent_count += 1
                         
                         progress_bar.progress((i + 1) / total)
-                        time.sleep(2) # Mandatory 2-second pause to prevent Gmail rate limits
+                        time.sleep(2) 
                     
                     st.success(f"✅ Mass Send Complete: {sent_count} emails dispatched.")
                     time.sleep(2)
