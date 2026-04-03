@@ -248,6 +248,34 @@ def init_db():
     conn.close()
 
 init_db()
+# --- 1.5 EXTERNAL AI MODEL CONFIGURATOR ---
+MODEL_CONFIG_FILE = "model_config.json"
+
+def get_ai_model_name():
+    """Reads the AI model name from an external file so users can update it without a patch."""
+    default_model = "gemini-2.5-flash-lite"
+    
+    # If the file doesn't exist, create it with the default model
+    if not os.path.exists(MODEL_CONFIG_FILE):
+        try:
+            with open(MODEL_CONFIG_FILE, "w") as f:
+                json.dump({
+                    "_instruction": "Change 'gemini_model' below if Google releases a new model.",
+                    "gemini_model": default_model
+                }, f, indent=4)
+        except Exception:
+            pass
+        return default_model
+    
+    # If it does exist, read the model name from it
+    else:
+        try:
+            with open(MODEL_CONFIG_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("gemini_model", default_model)
+        except Exception:
+            return default_model
+# -----------------------------------------
 
 def get_setting(key, default=""):
     conn = get_db_conn()
