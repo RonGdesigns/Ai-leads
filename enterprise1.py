@@ -136,7 +136,14 @@ st.markdown("""
 
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_ID = "OrrFSc94F9HJITilrZZcIg==" 
+
+# Put your 3 Gumroad Product IDs and their max seats here!
+GUMROAD_PRODUCTS = {
+    "paste_your_1_key_product_id_here": 1,
+    "paste_your_5_key_product_id_here": 5,
+    "OrrFSc94F9HJITilrZZcIg==": 10
+}
+
 LICENSE_FILE = "license.dat"
 SECRET_SALT = "OutboundAI_Enterprise_2024"
 
@@ -179,23 +186,45 @@ def check_activation():
                 if not input_key:
                     st.error("Please enter a key.")
                 else:
-                    with st.spinner("Verifying with Gumroad..."):
+                    with st.spinner("Verifying license tier..."):
                         url = "https://api.gumroad.com/v2/licenses/verify"
-                      # --- USE PRODUCT ID EXACTLY AS GUMROAD REQUESTED ---
-                        payload = {"product_id": PRODUCT_ID, "license_key": input_key}
-                        # -----------------------------------
+                        key_valid = False
+                        allowed_seats = 0
+                        current_uses = 0
                         
-                        try:
-                            res = requests.post(url, data=payload)
-                            data = res.json()
-                            
-                            if data.get("success") == True:
+                        # --- THE TIER-SNIFFER ---
+                        # The app tries the key against all 3 products automatically
+                        for prod_id, max_seats in GUMROAD_PRODUCTS.items():
+                            payload = {"product_id": prod_id, "license_key": input_key}
+                            try:
+                                res = requests.post(url, data=payload)
+                                data = res.json()
                                 
-                                # --- 10-SEAT ENTERPRISE LIMIT CHECK ---
-                                uses = data.get("uses", 0)
-                                if uses > 10:
-                                    st.error("❌ Maximum enterprise seats (10) reached for this License Key.")
-                                    st.stop()
+                                if data.get("success") == True:
+                                    key_valid = True
+                                    allowed_seats = max_seats
+                                    current_uses = data.get("uses", 0)
+                                    break # Stop looking, we found their tier!
+                            except Exception:
+                                pass # If connection fails, just keep trying the loop
+
+                        # --- THE ACTIVATION GATE ---
+                        if key_valid:
+                            if current_uses > allowed_seats:
+                                st.error(f"❌ Maximum seats ({allowed_seats}) reached for your License Tier.")
+                                st.stop()
+                            
+                            # Gumroad says it's real! Lock it to the hardware.
+                            final_hash = generate_license_hash(input_key, hw_id)
+                            
+                            with open(LICENSE_FILE, "w") as f:
+                                json.dump({"key": input_key, "hash": final_hash}, f)
+                                
+                            st.success(f"✅ Activation Successful! (Seat {current_uses} of {allowed_seats})")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid License Key. Please check your purchase receipt.")
                                 # --------------------------------------
                                 
                                 # Gumroad says it's real! Lock it to the hardware.
