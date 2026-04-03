@@ -417,7 +417,25 @@ with tab2:
         elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
 
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
-        edited_df = st.data_editor(display_df[cols_to_show], use_container_width=True, hide_index=True)
+        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
+        
+        # --- THE CLICKABLE LINKS FIX ---
+        edited_df = st.data_editor(
+            display_df[cols_to_show], 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Website": st.column_config.LinkColumn(),
+                "Instagram": st.column_config.LinkColumn(),
+                "Facebook": st.column_config.LinkColumn(),
+                "Twitter": st.column_config.LinkColumn(),
+                "Maps Link": st.column_config.LinkColumn(),
+                "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?"),
+                "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?"),
+                "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?")
+            }
+        )
+        # -------------------------------
         
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
