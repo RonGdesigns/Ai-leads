@@ -274,56 +274,13 @@ with tab1:
         else:
             search_query = f"{niche} in {city}, {region}" if city else f"{niche} in {region}"
             with st.status(f"🚀 Launching Async Engine for '{search_query}'...", expanded=True) as status:
-                st.write("1️⃣ Querying Google Maps API...")
-                url = 'https://places.googleapis.com/v1/places:searchText'
-                headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
-                
-                raw_places = []
-                page_token = ""
-                
-                while len(raw_places) < max_results:
-                    payload = {'textQuery': search_query, 'pageSize': 20}
-                    if page_token: payload['pageToken'] = page_token
-                    res = requests.post(url, headers=headers, json=payload)
-                    
-                    # --- DIAGNOSTIC MODE EXECUTION ---
-                    if diagnostic_mode:
-                        st.warning("🛑 DIAGNOSTIC MODE ACTIVE: Halting Engine to inspect raw Google API response.")
-                        st.write(f"**HTTP Status Code:** {res.status_code}")
-                        st.write(f"**Search Query Sent:** `{search_query}`")
-                        try:
-                            st.json(res.json())
-                        except:
-                            st.code(res.text)
-                        st.stop()
-                    # ---------------------------------
-                    
-                    if not res.ok: 
-                        st.error(f"⚠️ Google API Rejected Request: {res.status_code}")
-                        st.code(res.text)
-                        break
-                        
-                    data = res.json()
-                    
-                    for place in data.get('places', []):
-                        if place.get('businessStatus') == 'OPERATIONAL':
-                            raw_places.append(place)
-                        if len(raw_places) >= max_results: break
-                    
-                    page_token = data.get('nextPageToken')
-                    if not page_token: break
-                
-                if not raw_places:
-                    st.error("⚠️ The search finished but no valid leads were found. Try a broader search term or toggle 'Diagnostic Mode' in the sidebar to debug the API.")
-                    st.stop()
-                
-                st.write(f"2️⃣ Found {len(raw_places)} businesses. Launching Async Website Auditors...")
-                
-                urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
-                audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
-                
-                st.write("3️⃣ Processing and Saving to Database...")
+                st.write("3️⃣ Filtering Duplicates and Saving to Database...")
                 conn = get_db_conn()
+                
+                # --- THE DUPLICATE SHIELD ---
+                # 1. Load the current campaign's existing names into a fast memory set
+                existing_df = load_campaign_leads(st.session_state.current_campaign)
+                existing_names = set(existing_df['Name'].tolist()) if existing_df is not None else set()
                 
                 sample_keys = [
                     "campaign_name", "Name", "Rating", "Reviews", "Website", "Email", 
@@ -336,19 +293,26 @@ with tab1:
                 sql = f"INSERT INTO leads ({cols}) VALUES ({places})"
                 
                 batch_data = []
+                duplicates_skipped = 0
+                
                 for i, place in enumerate(raw_places):
                     try:
-                        audit = audit_results[i] if audit_results else {}
-                        
                         # Extreme Safe Name Extraction
                         display_name = place.get('displayName')
                         if isinstance(display_name, dict):
                             biz_name = display_name.get('text', 'N/A')
                         else:
                             biz_name = str(display_name) if display_name else 'N/A'
+                            
+                        # --- DUPLICATE CHECK ---
+                        # If the business is already in this campaign, skip it!
+                        if biz_name in existing_names:
+                            duplicates_skipped += 1
+                            continue
+                            
+                        audit = audit_results[i] if audit_results else {}
                         
-                        # Extreme Safe Type Casting (The Gas Station Fix)
-                        # We use 'or' to catch Google returning 'None' instead of just missing the key
+                        # Extreme Safe Type Casting
                         lead_row = (
                             str(st.session_state.current_campaign), 
                             str(biz_name), 
@@ -370,14 +334,15 @@ with tab1:
                         batch_data.append(lead_row)
                     except Exception as e:
                         st.error(f"⚠️ Data Formatting Error on lead {i}: {e}")
-                        st.stop() # Prevents the screen from wiping!
+                        st.stop()
                 
                 try:
-                    conn.executemany(sql, batch_data)
-                    conn.commit()
+                    if batch_data:
+                        conn.executemany(sql, batch_data)
+                        conn.commit()
                 except Exception as e:
                     st.error(f"🛑 Database Write Error: {e}")
-                    st.stop() # Prevents the screen from wiping!
+                    st.stop() 
                 finally:
                     conn.close()
                 
@@ -385,7 +350,7 @@ with tab1:
                 df = load_campaign_leads(st.session_state.current_campaign)
                 st.session_state.master_dataframe = df
                 
-                status.update(label=f"✅ Async Extraction Complete. Saved {len(batch_data)} leads.", state="complete")
+                status.update(label=f"✅ Complete. Saved {len(batch_data)} new leads (Skipped {duplicates_skipped} duplicates).", state="complete")
                 
                 st.toast("🎉 Hunt Complete! Moving to Analyze...")
                 time.sleep(1.5)
