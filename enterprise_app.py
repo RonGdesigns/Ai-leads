@@ -528,9 +528,12 @@ with tab3:
                 if not user_profession or not core_offer: st.warning("⚠️ Fill out your Persona fields above!")
                 else:
                     with st.spinner("AI is analyzing data and writing..."):
-                        draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)                        conn = get_db_conn()
+                        draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)
+                        
+                        conn = get_db_conn()
                         conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, lead_info['Email']))
                         conn.commit(); conn.close()
+                        
                         st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
                         st.toast("✅ Pitch Generated!")
                         st.rerun() 
@@ -594,18 +597,18 @@ with tab3:
                     
                     for idx, row in st.session_state.master_dataframe.iterrows():
                         if not row['Drafted Email'] or row['Drafted Email'] not in ["✅ SENT", "🔥 REPLIED"]:
-                            draft = draft_dynamic_email(row['Name'], row['Rating'], {"SSL": row['SSL'], "Mobile": row['Mobile'], "Pixels": row['Pixels']}, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)                            conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, row['Email']))
+                            draft = draft_dynamic_email(row['Name'], row['Rating'], {"SSL": row['SSL'], "Mobile": row['Mobile'], "Pixels": row['Pixels']}, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)
+                            
+                            conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, row['Email']))
                             st.session_state.master_dataframe.at[idx, 'Drafted Email'] = draft
                             
                             generated_count += 1
                             progress_bar.progress(generated_count / gen_limit)
                             
-                            # Break loop if we hit the batch limit the user selected
                             if generated_count >= gen_limit:
                                 break
                                 
-                            # --- AI RATE LIMIT PROTECTOR ---
-                            time.sleep(4) 
+                            time.sleep(4)
                             
                     conn.commit(); conn.close()
                     st.toast(f"✅ Successfully generated {generated_count} pitches!")
