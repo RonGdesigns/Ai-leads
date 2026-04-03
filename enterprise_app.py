@@ -524,10 +524,21 @@ with tab3:
         
         # --- DYNAMIC DROPDOWN FORMATTER ---
         def format_target_name(name):
-            status = st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == name, 'Drafted Email'].values[0]
-            if status in ["✅ SENT", "🔥 REPLIED"]:
-                return f"✅ {name}"
-            return name
+            # Extract the full data row for this specific business
+            row = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == name].iloc[0]
+            
+            status = row['Drafted Email']
+            rating = row['Rating']
+            reviews = row['Reviews']
+            phone = row['Phone']
+            
+            # Format the visual elements
+            prefix = "✅ " if status in ["✅ SENT", "🔥 REPLIED"] else ""
+            rating_str = f"⭐ {rating} ({reviews})" if str(rating) != "N/A" else "⭐ N/A"
+            phone_str = f"📞 {phone}" if str(phone) != "N/A" else "📞 N/A"
+            
+            # Combine into a sleek, data-rich string
+            return f"{prefix}{name}  |  {rating_str}  |  {phone_str}"
             
         selected_business = st.selectbox("Select target to pitch:", name_list, format_func=format_target_name)
         
