@@ -136,7 +136,7 @@ st.markdown("""
 
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_PERMALINK = "SourcingAgent" 
+PRODUCT_ID = "OrrFSc94F9HJITilrZZcIg==" 
 LICENSE_FILE = "license.dat"
 SECRET_SALT = "OutboundAI_Enterprise_2024"
 
@@ -181,7 +181,9 @@ def check_activation():
                 else:
                     with st.spinner("Verifying with Gumroad..."):
                         url = "https://api.gumroad.com/v2/licenses/verify"
-                        payload = {"product_permalink": PRODUCT_PERMALINK, "license_key": input_key}
+                      # --- USE PRODUCT ID EXACTLY AS GUMROAD REQUESTED ---
+                        payload = {"product_id": PRODUCT_ID, "license_key": input_key}
+                        # -----------------------------------
                         
                         try:
                             res = requests.post(url, data=payload)
