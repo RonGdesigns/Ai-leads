@@ -492,8 +492,11 @@ with tab3:
                 call_to_action = st.text_input("CTA:", value="Open to a 5-min chat?")
             core_offer = st.text_area("Core Offer:", value="")
 
-        st.markdown("### 🎯 2. Single Target Execution")
-        name_list = st.session_state.master_dataframe['Name'].tolist()
+        # SINGLE EXECUTION
+        st.markdown("### 🎯 Single Target Execution")
+        
+        # Extract the list and sort it alphabetically (case-insensitive) for a flawless UX
+        name_list = sorted(st.session_state.master_dataframe['Name'].tolist(), key=lambda x: str(x).lower())
         selected_business = st.selectbox("Select target to pitch:", name_list)
         
         matching_rows = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()
