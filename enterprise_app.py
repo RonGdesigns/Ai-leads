@@ -280,7 +280,14 @@ with tab1:
                     payload = {'textQuery': search_query, 'pageSize': 20}
                     if page_token: payload['pageToken'] = page_token
                     res = requests.post(url, headers=headers, json=payload)
-                    if not res.ok: break
+                    
+                    # --- THE ERROR CATCHER ---
+                    if not res.ok: 
+                        st.error(f"⚠️ Google API Rejected the Request: {res.status_code}")
+                        st.code(res.text) # This prints the exact error reason
+                        break
+                    # -------------------------
+                    
                     data = res.json()
                     
                     for place in data.get('places', []):
