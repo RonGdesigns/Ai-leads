@@ -50,25 +50,26 @@ def get_db_conn():
 def init_db():
     conn = get_db_conn()
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS campaigns (name TEXT PRIMARY KEY)''')
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, campaign_name TEXT, Name TEXT, Rating TEXT, Reviews INTEGER, 
                  Website TEXT, Email TEXT, Instagram TEXT, Facebook TEXT, Twitter TEXT, Phone TEXT, Address TEXT, 
                  Maps_Link TEXT, SSL TEXT, Mobile TEXT, Pixels TEXT, Pitch_SSL BOOLEAN, Pitch_Mobile BOOLEAN, 
                  Pitch_Pixels BOOLEAN, Drafted_Email TEXT, step_number INTEGER DEFAULT 1, last_contacted TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS logs (date_sent TEXT, business_name TEXT, email_sent_to TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS logs (date_sent TEXT, business_name TEXT, email_sent_to TEXT, email_body TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS bg_status (id INTEGER PRIMARY KEY, is_running BOOLEAN, total INTEGER, sent INTEGER, errors INTEGER)''')
     
     # --- ENTERPRISE AUTO-MIGRATION ---
-    # Check if the old table exists without the new columns and inject them safely
     c.execute("PRAGMA table_info(leads)")
     columns = [col[1] for col in c.fetchall()]
-    
     if "step_number" not in columns:
         c.execute("ALTER TABLE leads ADD COLUMN step_number INTEGER DEFAULT 1")
     if "last_contacted" not in columns:
         c.execute("ALTER TABLE leads ADD COLUMN last_contacted TEXT")
+        
+    c.execute("PRAGMA table_info(logs)")
+    log_columns = [col[1] for col in c.fetchall()]
+    if "email_body" not in log_columns:
+        c.execute("ALTER TABLE logs ADD COLUMN email_body TEXT")
     # ---------------------------------
     
     c.execute("INSERT OR IGNORE INTO campaigns (name) VALUES ('Default Campaign')")
@@ -147,7 +148,7 @@ def background_email_worker(targets, sender, password, smtp_server, smtp_port, b
             
             t_conn = get_db_conn()
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            t_conn.execute("INSERT INTO logs (date_sent, business_name, email_sent_to) VALUES (?, ?, ?)", (timestamp, target['Name'], target['Email']))
+            t_conn.execute("INSERT INTO logs (date_sent, business_name, email_sent_to, email_body) VALUES (?, ?, ?, ?)", (timestamp, target['Name'], target['Email'], target['Body']))
             t_conn.execute("UPDATE leads SET Drafted_Email='✅ SENT', last_contacted=? WHERE campaign_name=? AND Email=?", (timestamp, campaign_name, target['Email']))
             sent_count += 1
             t_conn.execute("UPDATE bg_status SET sent=? WHERE id=1", (sent_count,))
@@ -644,10 +645,18 @@ with tab4:
         conn = get_db_conn()
         logs_df = pd.read_sql("SELECT * FROM logs ORDER BY date_sent DESC", conn)
         conn.close()
-        
         st.metric("Total Emails Sent", len(logs_df))
-        if not logs_df.empty: st.dataframe(logs_df, use_container_width=True, hide_index=True)
-        else: st.info("No emails have been sent yet.")
+        if not logs_df.empty: 
+            st.dataframe(
+                logs_df, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "email_body": st.column_config.TextColumn("Email Content", width="large", help="Double-click any cell to read the full email.")
+                }
+            )
+        else: 
+            st.info("No emails have been sent yet.")
         
     with col_imap:
         st.markdown("### 📥 Reply Scanner")
