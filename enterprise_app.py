@@ -559,23 +559,42 @@ with tab3:
             if st.button("🔄 Refresh Status"): st.rerun()
             st.progress(bg_status['sent'] / max(1, bg_status['total']))
         
-        send_delay = st.slider("Anti-Spam Base Delay (Seconds):", min_value=10, max_value=120, value=45, help="To prevent domain blacklisting, the system will wait a random amount of time between this base delay and 1.5x this delay.")
+        # --- UI ALIGNMENT UPGRADE ---
+        col_gen_settings, col_send_settings = st.columns(2)
+        with col_gen_settings:
+            gen_limit = st.number_input("Batch Size (AI Generation):", min_value=1, value=10, step=1, help="Limit how many pitches the AI writes at once so you don't have to wait for the whole list.")
+        with col_send_settings:
+            send_delay = st.slider("Anti-Spam Base Delay (Seconds):", min_value=10, max_value=120, value=45, help="To prevent domain blacklisting, the system will wait a random amount of time between this base delay and 1.5x this delay.")
+            
         bulk_col1, bulk_col2 = st.columns(2)
         
         with bulk_col1:
-            if st.button("🤖 Bulk Generate All Pitches", use_container_width=True, disabled=bg_status["is_running"]):
+            if st.button(f"🤖 Bulk Generate {gen_limit} Pitches", use_container_width=True, disabled=bg_status["is_running"]):
                 if not user_profession or not core_offer: st.warning("⚠️ Fill out your Persona fields.")
                 else:
                     progress_bar = st.progress(0)
-                    total = len(st.session_state.master_dataframe)
+                    generated_count = 0
                     conn = get_db_conn()
+                    
                     for idx, row in st.session_state.master_dataframe.iterrows():
                         if not row['Drafted Email'] or row['Drafted Email'] not in ["✅ SENT", "🔥 REPLIED"]:
                             draft = draft_dynamic_email(row['Name'], row['Rating'], {"SSL": row['SSL'], "Mobile": row['Mobile'], "Pixels": row['Pixels']}, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
                             conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, row['Email']))
                             st.session_state.master_dataframe.at[idx, 'Drafted Email'] = draft
-                        progress_bar.progress((idx + 1) / total)
+                            
+                            generated_count += 1
+                            progress_bar.progress(generated_count / gen_limit)
+                            
+                            # Break loop if we hit the batch limit the user selected
+                            if generated_count >= gen_limit:
+                                break
+                                
+                            # --- AI RATE LIMIT PROTECTOR ---
+                            time.sleep(4) 
+                            
                     conn.commit(); conn.close()
+                    st.toast(f"✅ Successfully generated {generated_count} pitches!")
+                    time.sleep(1)
                     st.rerun()
                     
         with bulk_col2:
