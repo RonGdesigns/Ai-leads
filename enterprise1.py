@@ -1,29 +1,27 @@
+import os
 import uuid
 import hashlib
-import os
 import json
+import time
+import re
+import random
+import threading
+import smtplib
+import imaplib
+import sqlite3
+import asyncio
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 import streamlit as st
 import requests
 import pandas as pd
-import time
-import re
+import aiohttp
 from bs4 import BeautifulSoup
 import google.generativeai as genai
-import os
-import smtplib
-import imaplib
-import email
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import threading
-import sqlite3
-import asyncio
-import aiohttp
-import random
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
-# --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
-st.set_page_config(page_title="Outbound AI | Enterprise CRM", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="SortingSource | Enterprise Intelligence", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
@@ -136,6 +134,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
 PRODUCT_PERMALINK = "SourcingAgent" 
 LICENSE_FILE = "license.dat"
@@ -181,12 +180,8 @@ def check_activation():
                     st.error("Please enter a key.")
                 else:
                     with st.spinner("Verifying with Gumroad..."):
-                       # Ping Gumroad API
                         url = "https://api.gumroad.com/v2/licenses/verify"
-                        
-                        # --- USE PERMALINK INSTEAD OF ID ---
                         payload = {"product_permalink": PRODUCT_PERMALINK, "license_key": input_key}
-                        # -----------------------------------
                         
                         try:
                             res = requests.post(url, data=payload)
@@ -211,6 +206,8 @@ def check_activation():
 
 # Run the security check immediately
 check_activation()
+
+
 # --- 1. SQLITE DATABASE ENGINE (Enterprise WAL Migration) ---
 DB_FILE = "outbound_crm.db"
 
@@ -230,6 +227,7 @@ def init_db():
                  Pitch_Pixels BOOLEAN, Drafted_Email TEXT, step_number INTEGER DEFAULT 1, last_contacted TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS logs (date_sent TEXT, business_name TEXT, email_sent_to TEXT, email_body TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS bg_status (id INTEGER PRIMARY KEY, is_running BOOLEAN, total INTEGER, sent INTEGER, errors INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
     
     # --- ENTERPRISE AUTO-MIGRATION ---
     c.execute("PRAGMA table_info(leads)")
@@ -243,14 +241,18 @@ def init_db():
     log_columns = [col[1] for col in c.fetchall()]
     if "email_body" not in log_columns:
         c.execute("ALTER TABLE logs ADD COLUMN email_body TEXT")
-    # ---------------------------------
     
+    # Ensure campaigns table exists safely
+    c.execute('''CREATE TABLE IF NOT EXISTS campaigns (name TEXT PRIMARY KEY)''')
     c.execute("INSERT OR IGNORE INTO campaigns (name) VALUES ('Default Campaign')")
     c.execute("INSERT OR IGNORE INTO bg_status (id, is_running, total, sent, errors) VALUES (1, 0, 0, 0, 0)")
+    
     conn.commit()
     conn.close()
 
 init_db()
+
+
 # --- 1.5 EXTERNAL AI MODEL CONFIGURATOR ---
 MODEL_CONFIG_FILE = "model_config.json"
 
@@ -258,7 +260,6 @@ def get_ai_model_name():
     """Reads the AI model name from an external file so users can update it without a patch."""
     default_model = "gemini-2.5-flash-lite"
     
-    # If the file doesn't exist, create it with the default model
     if not os.path.exists(MODEL_CONFIG_FILE):
         try:
             with open(MODEL_CONFIG_FILE, "w") as f:
@@ -269,8 +270,6 @@ def get_ai_model_name():
         except Exception:
             pass
         return default_model
-    
-    # If it does exist, read the model name from it
     else:
         try:
             with open(MODEL_CONFIG_FILE, "r") as f:
@@ -278,7 +277,7 @@ def get_ai_model_name():
                 return data.get("gemini_model", default_model)
         except Exception:
             return default_model
-# -----------------------------------------
+
 
 def get_setting(key, default=""):
     conn = get_db_conn()
@@ -302,6 +301,7 @@ def load_campaign_leads(campaign_name):
             if col in df.columns: df[col] = df[col].astype(bool)
         df.columns = df.columns.str.replace('_', ' ')
     return df
+
 
 # --- 2. ASYNC SCRAPER & API LOGIC ---
 async def async_extract_and_audit(session, url):
@@ -327,6 +327,7 @@ async def process_audits_concurrently(urls):
     async with aiohttp.ClientSession() as session:
         tasks = [async_extract_and_audit(session, url) for url in urls]
         return await asyncio.gather(*tasks)
+
 
 # --- 3. BACKGROUND WORKER (With Anti-Spam Jitter) ---
 def background_email_worker(targets, sender, password, smtp_server, smtp_port, base_delay, campaign_name):
@@ -377,22 +378,22 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
     try:
         genai.configure(api_key=ai_api_key)
         
-        # --- READS MODEL FROM EXTERNAL CONFIG ---
         active_model = get_ai_model_name()
         model = genai.GenerativeModel(active_model) 
-        # ----------------------------------------
         
-        # --- THE ANTI-ROBOT PROMPT UPGRADE ---
         prompt = f"You are a professional {profession} writing a cold email to {business_name}. Tone: {tone}. CRITICAL GREETING RULES: You do NOT have a contact name. NEVER use placeholders like '[Name]' or '[Head of Operations]'. NEVER say 'Dear Owner' or 'Dear Head of Operations'. Start the email naturally with 'Hi there,' or 'Hi {business_name} team,' or just jump right into the first sentence without a greeting. Rating: {rating}. Audit: SSL Secure: {audit_data['SSL']}, Mobile Optimized: {audit_data['Mobile']}, Pixels: {audit_data['Pixels']}. Pitch SSL: {pitch_ssl}, Pitch Mobile: {pitch_mobile}, Pitch Pixels: {pitch_pixels}. If True, gently mention it as a problem. If all False, congratulate them on a solid business and pivot to offer. Pitch: {offer}. Trust: {proof}. CTA: {cta}. Keep it strictly under 150 words. Sign off as {name}."
         
         return model.generate_content(prompt).text
     except Exception as e: 
         return f"⚠️ AI Error: {e}"
+
+
 # --- 4. SESSION STATE MANAGEMENT ---
 if 'active_tab_index' not in st.session_state: 
     st.session_state.active_tab_index = 0
 if 'master_dataframe' not in st.session_state: st.session_state.master_dataframe = None
 if 'current_campaign' not in st.session_state: st.session_state.current_campaign = None
+
 
 # --- 5. SIDEBAR (The Engine Room) ---
 with st.sidebar:
@@ -434,9 +435,14 @@ with st.sidebar:
 
     # Campaign Manager
     st.subheader("📁 Campaign Manager")
-    conn = sqlite3.connect(DB_FILE)
-    camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
-    conn.close()
+    conn = get_db_conn()
+    try:
+        camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
+    except sqlite3.OperationalError:
+        init_db()
+        camp_list = ["Default Campaign"]
+    finally:
+        conn.close()
     
     active_campaign = st.selectbox("Active Campaign:", camp_list)
     new_camp = st.text_input("Create New Campaign:", placeholder="e.g., HVAC Texas")
@@ -478,10 +484,12 @@ with st.sidebar:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.success("🔒 **Privacy First & 100% Local**\n\nYour data is saved securely on your local DB.")
 
+
 # --- 6. MAIN HEADER ---
 st.markdown("<h1 style='text-align: center; color: #4b6cb7;'>💠 SortingSource</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.1rem; margin-top: -15px;'>Enterprise Intelligence Platform | <a href='https://sortingsource.com' style='text-decoration: none; color: #4b6cb7;'>sortingsource.com</a></p>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: #888;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
+
 
 # --- 7. TABS ---
 tab_names = ["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"]
@@ -536,92 +544,89 @@ with tab1:
                     if not page_token: break
                     time.sleep(1)
 
-                # --- STEP 2: ASYNC AUDITS ---
-                st.write(f"2️⃣ Found {len(raw_places)} leads. Running high-speed async audits...")
-                urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
-                
-                # Execute the async auditor
-                audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
+                if 'raw_places' in locals() and raw_places:
+                    # --- STEP 2: ASYNC AUDITS ---
+                    st.write(f"2️⃣ Found {len(raw_places)} leads. Running high-speed async audits...")
+                    urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
+                    
+                    audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
 
-                # --- STEP 3: DUPLICATE SHIELD & SAVE ---
-                st.write("3️⃣ Filtering Duplicates and Saving to Database...")
-                conn = get_db_conn()
-                
-                existing_df = load_campaign_leads(st.session_state.current_campaign)
-                existing_names = set(existing_df['Name'].tolist()) if existing_df is not None else set()
-                
-                sample_keys = [
-                    "campaign_name", "Name", "Rating", "Reviews", "Website", "Email", 
-                    "Instagram", "Facebook", "Twitter", "Phone", "Address", "Maps_Link", 
-                    "SSL", "Mobile", "Pixels", "Pitch_SSL", "Pitch_Mobile", "Pitch_Pixels", 
-                    "Drafted_Email", "step_number", "last_contacted"
-                ]
-                cols = ", ".join(sample_keys)
-                places = ", ".join(["?"] * len(sample_keys))
-                sql = f"INSERT INTO leads ({cols}) VALUES ({places})"
-                
-                batch_data = []
-                duplicates_skipped = 0
-                
-                for i, place in enumerate(raw_places):
+                    # --- STEP 3: DUPLICATE SHIELD & SAVE ---
+                    st.write("3️⃣ Filtering Duplicates and Saving to Database...")
+                    conn = get_db_conn()
+                    
+                    existing_df = load_campaign_leads(st.session_state.current_campaign)
+                    existing_names = set(existing_df['Name'].tolist()) if existing_df is not None else set()
+                    
+                    sample_keys = [
+                        "campaign_name", "Name", "Rating", "Reviews", "Website", "Email", 
+                        "Instagram", "Facebook", "Twitter", "Phone", "Address", "Maps_Link", 
+                        "SSL", "Mobile", "Pixels", "Pitch_SSL", "Pitch_Mobile", "Pitch_Pixels", 
+                        "Drafted_Email", "step_number", "last_contacted"
+                    ]
+                    cols = ", ".join(sample_keys)
+                    places = ", ".join(["?"] * len(sample_keys))
+                    sql = f"INSERT INTO leads ({cols}) VALUES ({places})"
+                    
+                    batch_data = []
+                    duplicates_skipped = 0
+                    
+                    for i, place in enumerate(raw_places):
+                        try:
+                            display_name = place.get('displayName')
+                            if isinstance(display_name, dict):
+                                biz_name = display_name.get('text', 'N/A')
+                            else:
+                                biz_name = str(display_name) if display_name else 'N/A'
+                                
+                            if biz_name in existing_names:
+                                duplicates_skipped += 1
+                                continue
+                                
+                            audit = audit_results[i] if i < len(audit_results) else {}
+                            
+                            lead_row = (
+                                str(st.session_state.current_campaign), 
+                                str(biz_name), 
+                                str(place.get('rating') or 'N/A'),
+                                int(place.get('userRatingCount') or 0), 
+                                str(audit.get("Website") or "N/A"), 
+                                str(audit.get("Email") or "N/A"),
+                                str(audit.get("Instagram") or "N/A"), 
+                                str(audit.get("Facebook") or "N/A"), 
+                                str(audit.get("Twitter") or "N/A"),
+                                str(place.get('nationalPhoneNumber') or 'N/A'), 
+                                str(place.get('formattedAddress') or 'N/A'),
+                                str(place.get('googleMapsUri') or 'N/A'), 
+                                str(audit.get("SSL") or "N/A"), 
+                                str(audit.get("Mobile") or "N/A"),
+                                str(audit.get("Pixels") or "N/A"), 
+                                False, False, False, "", 1, ""
+                            )
+                            batch_data.append(lead_row)
+                        except Exception as e:
+                            st.warning(f"⚠️ Skipping record due to format error: {e}")
+                    
                     try:
-                        # Extreme Safe Name Extraction
-                        display_name = place.get('displayName')
-                        if isinstance(display_name, dict):
-                            biz_name = display_name.get('text', 'N/A')
-                        else:
-                            biz_name = str(display_name) if display_name else 'N/A'
-                            
-                        # DUPLICATE CHECK
-                        if biz_name in existing_names:
-                            duplicates_skipped += 1
-                            continue
-                            
-                        audit = audit_results[i] if audit_results else {}
-                        
-                        # Extreme Safe Type Casting
-                        lead_row = (
-                            str(st.session_state.current_campaign), 
-                            str(biz_name), 
-                            str(place.get('rating') or 'N/A'),
-                            int(place.get('userRatingCount') or 0), 
-                            str(audit.get("Website") or "N/A"), 
-                            str(audit.get("Email") or "N/A"),
-                            str(audit.get("Instagram") or "N/A"), 
-                            str(audit.get("Facebook") or "N/A"), 
-                            str(audit.get("Twitter") or "N/A"),
-                            str(place.get('nationalPhoneNumber') or 'N/A'), 
-                            str(place.get('formattedAddress') or 'N/A'),
-                            str(place.get('googleMapsUri') or 'N/A'), 
-                            str(audit.get("SSL") or "N/A"), 
-                            str(audit.get("Mobile") or "N/A"),
-                            str(audit.get("Pixels") or "N/A"), 
-                            False, False, False, "", 1, ""
-                        )
-                        batch_data.append(lead_row)
+                        if batch_data:
+                            conn.executemany(sql, batch_data)
+                            conn.commit()
                     except Exception as e:
-                        st.error(f"⚠️ Data Formatting Error on lead {i}: {e}")
-                        st.stop()
-                
-                try:
-                    if batch_data:
-                        conn.executemany(sql, batch_data)
-                        conn.commit()
-                except Exception as e:
-                    st.error(f"🛑 Database Write Error: {e}")
-                    st.stop() 
-                finally:
-                    conn.close()
-                
-                # Refresh UI
-                df = load_campaign_leads(st.session_state.current_campaign)
-                st.session_state.master_dataframe = df
-                
-                status.update(label=f"✅ Complete. Saved {len(batch_data)} new leads (Skipped {duplicates_skipped} duplicates).", state="complete")
-                
-                st.toast("🎉 Hunt Complete! Moving to Analyze...")
-                time.sleep(1.5)
-                st.rerun()
+                        st.error(f"🛑 Database Write Error: {e}")
+                    finally:
+                        conn.close()
+                    
+                    df = load_campaign_leads(st.session_state.current_campaign)
+                    st.session_state.master_dataframe = df
+                    
+                    status.update(label=f"✅ Complete. Saved {len(batch_data)} new leads (Skipped {duplicates_skipped} duplicates).", state="complete")
+                    
+                    st.toast("🎉 Hunt Complete! Moving to Analyze...")
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    status.update(label="⚠️ Search yielded no results to process.", state="error")
+
 
 # --- TAB 2: ANALYZE ---
 with tab2:
@@ -649,15 +654,11 @@ with tab2:
         elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
         elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
 
-        # --- THE 'BROKEN LINK' FRONTEND MASK ---
         url_cols = ["Website", "Instagram", "Facebook", "Twitter", "Maps Link"]
         for col in url_cols:
             if col in display_df.columns:
                 display_df[col] = display_df[col].replace(["N/A", "No Website Found"], None)
 
-        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
-        
-        # --- ADD VISUAL CHECKMARKS TO TAB 2 ---
         display_df['Name'] = display_df.apply(lambda r: f"✅ {r['Name']}" if r['Drafted Email'] in ['✅ SENT', '🔥 REPLIED'] else r['Name'], axis=1)
 
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
@@ -680,11 +681,9 @@ with tab2:
         
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
-            # --- THE BACKEND RESTORER (WITH SAFE NAME STRIPPING) ---
             clean_row = row.fillna("N/A")
-            original_name = clean_row['Name'].replace("✅ ", "") # Strip the checkmark for DB safety
+            original_name = clean_row['Name'].replace("✅ ", "")
             
-            # Safely update ONLY the editable checkbox columns in the master dataframe
             st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == original_name, ['Pitch SSL', 'Pitch Mobile', 'Pitch Pixels']] = [clean_row['Pitch SSL'], clean_row['Pitch Mobile'], clean_row['Pitch Pixels']]
             
             conn.execute("UPDATE leads SET Pitch_SSL=?, Pitch_Mobile=?, Pitch_Pixels=? WHERE campaign_name=? AND Name=?", 
@@ -697,6 +696,7 @@ with tab2:
     else: 
         st.info("👈 Run the scraper in Step 1 to populate your Command Center.")
 
+
 # --- TAB 3: PITCH & SEND ---
 with tab3:
     if st.session_state.master_dataframe is not None:
@@ -706,7 +706,6 @@ with tab3:
                 user_profession = st.text_input("Your Profession:", value=get_setting("user_profession", ""))
                 your_name = st.text_input("Your Name:", value=get_setting("your_name", ""))
                 
-                # --- NEW TONE/PERSONA SELECTOR ---
                 tone_dropdown = st.selectbox("AI Tone / Persona:", ["Friendly & Conversational", "Direct & Professional", "Consultative & Helpful", "Witty & Humorous", "Type custom tone..."])
                 if tone_dropdown == "Type custom tone...":
                     email_tone = st.text_input("Enter exact tone:", placeholder="e.g., Aggressive Wolf of Wall Street")
@@ -718,7 +717,6 @@ with tab3:
                 call_to_action = st.text_input("CTA:", value=get_setting("cta", "Open to a 5-min chat?"))
             core_offer = st.text_area("Core Offer:", value=get_setting("core_offer", ""))
             
-            # --- SAVE DEFAULTS BUTTON ---
             if st.button("💾 Save Persona Defaults"):
                 save_setting("user_profession", user_profession); save_setting("your_name", your_name)
                 save_setting("social_proof", social_proof); save_setting("cta", call_to_action)
@@ -727,13 +725,10 @@ with tab3:
 
         st.markdown("### 🎯 2. Single Target Execution")
         
-        # --- DYNAMIC SORTING CONTROL ---
         sort_by = st.radio("Sort List By:", ["Name (A-Z)", "Highest Rating", "Most Reviews"], horizontal=True)
         
-        # --- THE FIX: Filter out anyone without an email address first! ---
         sort_df = st.session_state.master_dataframe[st.session_state.master_dataframe['Email'] != 'N/A'].copy()
         
-        # Failsafe: Stop the app gracefully if NO one has an email
         if sort_df.empty:
             st.warning("⚠️ No leads with valid emails found in this campaign. Go back to Tab 1 to hunt for more!")
             st.stop()
@@ -767,7 +762,6 @@ with tab3:
         lead_info = st.session_state.master_dataframe.iloc[lead_idx]
         current_draft = lead_info['Drafted Email']
 
-        # --- FIX: MOVED TEXT AREA ABOVE THE BUTTONS ---
         if current_draft and current_draft not in ["✅ SENT", "🔥 REPLIED"]:
             edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
             if edited_draft != current_draft:
@@ -775,7 +769,7 @@ with tab3:
                 conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (edited_draft, st.session_state.current_campaign, lead_info['Email']))
                 conn.commit(); conn.close()
                 st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = edited_draft
-                current_draft = edited_draft  # Update the variable so the Send button uses your edits!
+                current_draft = edited_draft  
         elif current_draft in ["✅ SENT", "🔥 REPLIED"]: 
             st.success(f"Status: {current_draft}")
 
@@ -800,8 +794,6 @@ with tab3:
                     with st.spinner("Dispatching through SMTP..."):
                         try:
                             msg = MIMEMultipart(); msg['From'] = sender_email; msg['To'] = lead_info['Email']; msg['Subject'] = f"Quick question regarding {lead_info['Name']}'s website"
-                            
-                            # This now sends exactly what is in the current_draft (including your edits)
                             msg.attach(MIMEText(current_draft, 'plain'))
                             
                             server = smtplib.SMTP(smtp_server, int(smtp_port)); server.starttls(); server.login(sender_email, app_password); server.send_message(msg); server.quit()
@@ -827,7 +819,6 @@ with tab3:
             if st.button("🔄 Refresh Status"): st.rerun()
             st.progress(bg_status['sent'] / max(1, bg_status['total']))
         
-        # --- UI ALIGNMENT UPGRADE ---
         col_gen_settings, col_send_settings = st.columns(2)
         with col_gen_settings:
             gen_limit = st.number_input("Batch Size (AI Generation):", min_value=1, value=10, step=1, help="Limit how many pitches the AI writes at once so you don't have to wait for the whole list.")
@@ -882,14 +873,19 @@ with tab3:
                     st.rerun()
     else: st.info("👈 Run the scraper in Step 1 before drafting emails.")
 
+
 # --- TAB 4: CAMPAIGN LOGS & IMAP ---
 with tab4:
     col_log, col_imap = st.columns([2, 1])
     with col_log:
         st.markdown("### 📜 Dispatch Logs")
         conn = get_db_conn()
-        logs_df = pd.read_sql("SELECT * FROM logs ORDER BY date_sent DESC", conn)
+        try:
+            logs_df = pd.read_sql("SELECT * FROM logs ORDER BY date_sent DESC", conn)
+        except sqlite3.OperationalError:
+            logs_df = pd.DataFrame()
         conn.close()
+        
         st.metric("Total Emails Sent", len(logs_df))
         if not logs_df.empty: 
             st.dataframe(
