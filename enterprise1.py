@@ -476,8 +476,9 @@ with st.sidebar:
     st.success("🔒 **Privacy First & 100% Local**\n\nYour data is saved securely on your local DB.")
 
 # --- 6. MAIN HEADER ---
-st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #4b6cb7;'>💠 SortingSource</h1>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.1rem; margin-top: -15px;'>Enterprise Intelligence Platform | <a href='https://sortingsource.com' style='text-decoration: none; color: #4b6cb7;'>sortingsource.com</a></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: #888;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
 
 # --- 7. TABS ---
 tab_names = ["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"]
