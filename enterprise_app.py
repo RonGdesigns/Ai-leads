@@ -281,12 +281,13 @@ with tab1:
                     if page_token: payload['pageToken'] = page_token
                     res = requests.post(url, headers=headers, json=payload)
                     
-                    # --- THE ERROR CATCHER ---
-                    if not res.ok: 
-                        st.error(f"⚠️ Google API Rejected the Request: {res.status_code}")
-                        st.code(res.text) # This prints the exact error reason
-                        break
-                    # -------------------------
+                    # --- THE ULTIMATE DEBUGGER ---
+                    st.warning("🛑 HALTING ENGINE FOR DIAGNOSTICS")
+                    st.write(f"HTTP Status Code: {res.status_code}")
+                    st.write(f"Search Query Sent: {search_query}")
+                    st.json(res.json()) # This prints the raw Google Matrix data
+                    st.stop() # Stops the rest of the app from running so we can look at the data
+                    # -----------------------------
                     
                     data = res.json()
                     
