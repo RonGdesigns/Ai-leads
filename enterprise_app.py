@@ -227,11 +227,10 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key in the settings sidebar."
     try:
         genai.configure(api_key=ai_api_key)
-        
-        # --- THE FIX: Swapped to Flash-Lite for 1,000/day Free Quota ---
         model = genai.GenerativeModel('gemini-2.5-flash-lite') 
         
-        prompt = f"You are a professional {profession}. Write a short cold email to the Head of Operations at {business_name} using a {tone} tone. CRITICAL RULE: Do NOT say 'Dear Owner' or 'To the Owner'. Address them naturally, or say something like 'Hi team at {business_name}' if you must. Rating: {rating}. Audit: SSL Secure: {audit_data['SSL']}, Mobile Optimized: {audit_data['Mobile']}, Pixels: {audit_data['Pixels']}. Instructions - Pitch SSL: {pitch_ssl}, Pitch Mobile: {pitch_mobile}, Pitch Pixels: {pitch_pixels}. If True, gently mention it as a problem. If all False, congratulate them on a solid business and pivot to offer. Pitch: {offer}. Trust: {proof}. CTA: {cta}. Keep it under 150 words. Sign off as {name}."
+        # --- THE ANTI-ROBOT PROMPT UPGRADE ---
+        prompt = f"You are a professional {profession} writing a cold email to {business_name}. Tone: {tone}. CRITICAL GREETING RULES: You do NOT have a contact name. NEVER use placeholders like '[Name]' or '[Head of Operations]'. NEVER say 'Dear Owner' or 'Dear Head of Operations'. Start the email naturally with 'Hi there,' or 'Hi {business_name} team,' or just jump right into the first sentence without a greeting. Rating: {rating}. Audit: SSL Secure: {audit_data['SSL']}, Mobile Optimized: {audit_data['Mobile']}, Pixels: {audit_data['Pixels']}. Pitch SSL: {pitch_ssl}, Pitch Mobile: {pitch_mobile}, Pitch Pixels: {pitch_pixels}. If True, gently mention it as a problem. If all False, congratulate them on a solid business and pivot to offer. Pitch: {offer}. Trust: {proof}. CTA: {cta}. Keep it strictly under 150 words. Sign off as {name}."
         
         return model.generate_content(prompt).text
     except Exception as e: 
