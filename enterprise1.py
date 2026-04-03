@@ -137,7 +137,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_ID = "paste_your_product_id_here" # <-- PASTE YOUR GUMROAD ID HERE
+PRODUCT_ID = "aetlq" # <-- PASTE YOUR GUMROAD ID HERE
 LICENSE_FILE = "license.dat"
 SECRET_SALT = "OutboundAI_Enterprise_2024" # Do not change this after you launch
 
