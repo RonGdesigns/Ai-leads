@@ -274,11 +274,44 @@ with tab1:
         else:
             search_query = f"{niche} in {city}, {region}" if city else f"{niche} in {region}"
             with st.status(f"🚀 Launching Async Engine for '{search_query}'...", expanded=True) as status:
+                
+                # --- STEP 1: FETCH FROM GOOGLE ---
+                st.write("1️⃣ Fetching Leads from Google Maps...")
+                url = 'https://places.googleapis.com/v1/places:searchText'
+                headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
+                
+                raw_places = []
+                page_token = ""
+                
+                while len(raw_places) < max_results:
+                    payload = {'textQuery': search_query, 'pageSize': 20}
+                    if page_token: payload['pageToken'] = page_token
+                    res = requests.post(url, headers=headers, json=payload)
+                    if not res.ok: break
+                    data = res.json()
+                    
+                    places_batch = [p for p in data.get('places', []) if p.get('businessStatus') == 'OPERATIONAL']
+                    raw_places.extend(places_batch)
+                    
+                    if len(raw_places) >= max_results:
+                        raw_places = raw_places[:max_results]
+                        break
+                        
+                    page_token = data.get('nextPageToken')
+                    if not page_token: break
+                    time.sleep(1)
+
+                # --- STEP 2: ASYNC AUDITS ---
+                st.write(f"2️⃣ Found {len(raw_places)} leads. Running high-speed async audits...")
+                urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
+                
+                # Execute the async auditor you built at the top of the file
+                audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
+
+                # --- STEP 3: DUPLICATE SHIELD & SAVE ---
                 st.write("3️⃣ Filtering Duplicates and Saving to Database...")
                 conn = get_db_conn()
                 
-                # --- THE DUPLICATE SHIELD ---
-                # 1. Load the current campaign's existing names into a fast memory set
                 existing_df = load_campaign_leads(st.session_state.current_campaign)
                 existing_names = set(existing_df['Name'].tolist()) if existing_df is not None else set()
                 
@@ -304,8 +337,7 @@ with tab1:
                         else:
                             biz_name = str(display_name) if display_name else 'N/A'
                             
-                        # --- DUPLICATE CHECK ---
-                        # If the business is already in this campaign, skip it!
+                        # DUPLICATE CHECK
                         if biz_name in existing_names:
                             duplicates_skipped += 1
                             continue
