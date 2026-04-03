@@ -136,7 +136,7 @@ st.markdown("""
 
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_PERMALINK = "SourcingAgent" 
+PRODUCT_PERMALINK = "sourcingagent" 
 LICENSE_FILE = "license.dat"
 SECRET_SALT = "OutboundAI_Enterprise_2024"
 
@@ -198,7 +198,7 @@ def check_activation():
                                 time.sleep(2)
                                 st.rerun()
                             else:
-                                st.error("❌ Invalid License Key. Please check your purchase receipt.")
+                                st.error(f"❌ Gumroad Error: {data.get('message', 'Unknown Error')} | Full Response: {data}")
                         except Exception as e:
                             st.error("⚠️ Could not connect to the licensing server. Check your internet connection.")
                             
