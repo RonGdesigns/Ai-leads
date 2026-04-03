@@ -139,9 +139,9 @@ st.markdown("""
 
 # Put your 3 Gumroad Product IDs and their max seats here!
 GUMROAD_PRODUCTS = {
-    "paste_your_1_key_product_id_here": 1,
-    "paste_your_5_key_product_id_here": 5,
-    "OrrFSc94F9HJITilrZZcIg==": 10
+    "OrrFSc94F9HJITilrZZcIg==": 1,
+    "v12Klsupttp1EF5FtA6gRA==": 5,
+    "KxT76gzj6d75FgwzqUtaLw==": 10
 }
 
 LICENSE_FILE = "license.dat"
