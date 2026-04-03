@@ -137,7 +137,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_PERMALINK = "your_gumroad_product_permalink" # Replace with your Gumroad URL slug
+PRODUCT_ID = "paste_your_product_id_here" # <-- PASTE YOUR GUMROAD ID HERE
 LICENSE_FILE = "license.dat"
 SECRET_SALT = "OutboundAI_Enterprise_2024" # Do not change this after you launch
 
@@ -183,7 +183,10 @@ def check_activation():
                     with st.spinner("Verifying with Gumroad..."):
                         # Ping Gumroad API
                         url = "https://api.gumroad.com/v2/licenses/verify"
-                        payload = {"product_permalink": PRODUCT_PERMALINK, "license_key": input_key}
+                        
+                        # --- THE API UPDATE IS HERE ---
+                        payload = {"product_id": PRODUCT_ID, "license_key": input_key}
+                        # ------------------------------
                         
                         try:
                             res = requests.post(url, data=payload)
