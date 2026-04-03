@@ -190,8 +190,23 @@ def check_activation():
                             data = res.json()
                             
                             if data.get("success") == True:
+                                
+                                # --- 10-SEAT ENTERPRISE LIMIT CHECK ---
+                                uses = data.get("uses", 0)
+                                if uses > 10:
+                                    st.error("❌ Maximum enterprise seats (10) reached for this License Key.")
+                                    st.stop()
+                                # --------------------------------------
+                                
                                 # Gumroad says it's real! Lock it to the hardware.
                                 final_hash = generate_license_hash(input_key, hw_id)
+                                
+                                with open(LICENSE_FILE, "w") as f:
+                                    json.dump({"key": input_key, "hash": final_hash}, f)
+                                    
+                                st.success(f"✅ Activation Successful! (Seat {uses} of 10)")
+                                time.sleep(2)
+                                st.rerun()
                                 
                                 with open(LICENSE_FILE, "w") as f:
                                     json.dump({"key": input_key, "hash": final_hash}, f)
