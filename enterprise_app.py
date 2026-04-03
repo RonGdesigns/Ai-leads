@@ -326,35 +326,58 @@ with tab1:
                 
                 batch_data = []
                 for i, place in enumerate(raw_places):
-                    audit = audit_results[i]
-                    display_name = place.get('displayName', {})
-                    biz_name = display_name.get('text', 'N/A') if isinstance(display_name, dict) else str(display_name)
-                    
-                    lead_row = (
-                        str(st.session_state.current_campaign), str(biz_name), str(place.get('rating', 'N/A')),
-                        int(place.get('userRatingCount', 0)), str(audit.get("Website", "N/A")), str(audit.get("Email", "N/A")),
-                        str(audit.get("Instagram", "N/A")), str(audit.get("Facebook", "N/A")), str(audit.get("Twitter", "N/A")),
-                        str(place.get('nationalPhoneNumber', 'N/A')), str(place.get('formattedAddress', 'N/A')),
-                        str(place.get('googleMapsUri', 'N/A')), str(audit.get("SSL", "N/A")), str(audit.get("Mobile", "N/A")),
-                        str(audit.get("Pixels", "N/A")), False, False, False, "", 1, ""
-                    )
-                    batch_data.append(lead_row)
+                    try:
+                        audit = audit_results[i] if audit_results else {}
+                        
+                        # Extreme Safe Name Extraction
+                        display_name = place.get('displayName')
+                        if isinstance(display_name, dict):
+                            biz_name = display_name.get('text', 'N/A')
+                        else:
+                            biz_name = str(display_name) if display_name else 'N/A'
+                        
+                        # Extreme Safe Type Casting (The Gas Station Fix)
+                        # We use 'or' to catch Google returning 'None' instead of just missing the key
+                        lead_row = (
+                            str(st.session_state.current_campaign), 
+                            str(biz_name), 
+                            str(place.get('rating') or 'N/A'),
+                            int(place.get('userRatingCount') or 0), 
+                            str(audit.get("Website") or "N/A"), 
+                            str(audit.get("Email") or "N/A"),
+                            str(audit.get("Instagram") or "N/A"), 
+                            str(audit.get("Facebook") or "N/A"), 
+                            str(audit.get("Twitter") or "N/A"),
+                            str(place.get('nationalPhoneNumber') or 'N/A'), 
+                            str(place.get('formattedAddress') or 'N/A'),
+                            str(place.get('googleMapsUri') or 'N/A'), 
+                            str(audit.get("SSL") or "N/A"), 
+                            str(audit.get("Mobile") or "N/A"),
+                            str(audit.get("Pixels") or "N/A"), 
+                            False, False, False, "", 1, ""
+                        )
+                        batch_data.append(lead_row)
+                    except Exception as e:
+                        st.error(f"⚠️ Data Formatting Error on lead {i}: {e}")
+                        st.stop() # Prevents the screen from wiping!
                 
                 try:
                     conn.executemany(sql, batch_data)
                     conn.commit()
                 except Exception as e:
-                    st.error(f"Database Write Error: {e}")
+                    st.error(f"🛑 Database Write Error: {e}")
+                    st.stop() # Prevents the screen from wiping!
                 finally:
                     conn.close()
                 
+                # Refresh UI
                 df = load_campaign_leads(st.session_state.current_campaign)
                 st.session_state.master_dataframe = df
                 
                 status.update(label=f"✅ Async Extraction Complete. Saved {len(batch_data)} leads.", state="complete")
                 
                 st.toast("🎉 Hunt Complete! Moving to Analyze...")
-                time.sleep(1)
+                time.sleep(1.5)
                 st.rerun()
 
 # --- TAB 2: ANALYZE ---
