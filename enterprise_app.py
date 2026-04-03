@@ -168,13 +168,13 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
-# --- 4. SESSION STATE MANAGEMENT (Upgraded) ---
+# --- 4. SESSION STATE MANAGEMENT ---
 if 'active_tab_index' not in st.session_state: 
     st.session_state.active_tab_index = 0
 if 'master_dataframe' not in st.session_state: st.session_state.master_dataframe = None
 if 'current_campaign' not in st.session_state: st.session_state.current_campaign = None
 
-# --- 5. SIDEBAR (The Self-Healing Engine) ---
+# --- 5. SIDEBAR (The Engine Room) ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
     st.title("⚙️ Engine Room")
@@ -186,18 +186,6 @@ with st.sidebar:
         **2. Analyze:** Review your Command Center dashboard.
         **3. Pitch:** Generate custom AI emails and send them safely.
         **4. Logs & Replies:** IMAP scanner automatically tracks replies.
-
-        ---
-        ### 🔑 Setup: APIs & Email Connections
-        **1. Google Places API Key (For Hunting)**
-        * **Step 1:** [Google Cloud Console](https://console.cloud.google.com/) -> New Project.
-        * **Step 2:** Billing -> Link a billing account.
-        * **Step 3:** APIs & Services -> Library -> **Places API (New)** -> Enable.
-        * **Step 4:** APIs & Services -> Credentials -> Create API Key.
-
-        **2. Gemini API Key** -> [Google AI Studio](https://aistudio.google.com/app/apikey).
-        
-        **3. Email App Password (CRITICAL)** -> Go to Google Security -> 2-Step Verification -> App Passwords. Use this, not your real password.
         """)
 
     st.subheader("📁 Campaign Manager")
@@ -235,6 +223,12 @@ with st.sidebar:
             save_setting("smtp_server", smtp_server); save_setting("smtp_port", smtp_port)
             save_setting("imap_server", imap_server); save_setting("sender_email", sender_email); save_setting("app_password", app_password)
             st.toast("✅ Infrastructure Saved Locally!")
+            
+    st.divider()
+    # --- THE DIAGNOSTIC TOGGLE ---
+    diagnostic_mode = st.toggle("🛠️ Diagnostic Mode (Debug API)")
+    if diagnostic_mode:
+        st.caption("⚠️ Diagnostic Mode will halt the app mid-hunt to display raw API data.")
 
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.success("🔒 **Privacy First & 100% Local**\n\nYour data is saved securely on your local DB.")
@@ -243,7 +237,7 @@ with st.sidebar:
 st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
 
-# --- 7. TABS (With Controller) ---
+# --- 7. TABS ---
 tab_names = ["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"]
 tab1, tab2, tab3, tab4 = st.tabs(tab_names)
 
@@ -281,14 +275,23 @@ with tab1:
                     if page_token: payload['pageToken'] = page_token
                     res = requests.post(url, headers=headers, json=payload)
                     
-                    # --- THE ULTIMATE DEBUGGER ---
-                    st.warning("🛑 HALTING ENGINE FOR DIAGNOSTICS")
-                    st.write(f"HTTP Status Code: {res.status_code}")
-                    st.write(f"Search Query Sent: {search_query}")
-                    st.json(res.json()) # This prints the raw Google Matrix data
-                    st.stop() # Stops the rest of the app from running so we can look at the data
-                    # -----------------------------
+                    # --- DIAGNOSTIC MODE EXECUTION ---
+                    if diagnostic_mode:
+                        st.warning("🛑 DIAGNOSTIC MODE ACTIVE: Halting Engine to inspect raw Google API response.")
+                        st.write(f"**HTTP Status Code:** {res.status_code}")
+                        st.write(f"**Search Query Sent:** `{search_query}`")
+                        try:
+                            st.json(res.json())
+                        except:
+                            st.code(res.text)
+                        st.stop()
+                    # ---------------------------------
                     
+                    if not res.ok: 
+                        st.error(f"⚠️ Google API Rejected Request: {res.status_code}")
+                        st.code(res.text)
+                        break
+                        
                     data = res.json()
                     
                     for place in data.get('places', []):
@@ -298,6 +301,10 @@ with tab1:
                     
                     page_token = data.get('nextPageToken')
                     if not page_token: break
+                
+                if not raw_places:
+                    st.error("⚠️ The search finished but no valid leads were found. Try a broader search term or toggle 'Diagnostic Mode' in the sidebar to debug the API.")
+                    st.stop()
                 
                 st.write(f"2️⃣ Found {len(raw_places)} businesses. Launching Async Website Auditors...")
                 
@@ -354,7 +361,6 @@ with tab1:
 with tab2:
     if st.session_state.master_dataframe is not None:
         df = st.session_state.master_dataframe
-        
         st.markdown("### 🎛️ Command Center")
         
         m1, m2, m3, m4 = st.columns(4)
@@ -406,17 +412,13 @@ with tab3:
             core_offer = st.text_area("Core Offer:", value="")
 
         st.markdown("### 🎯 2. Single Target Execution")
-        
-        # 1. Safely handle the selectbox
         name_list = st.session_state.master_dataframe['Name'].tolist()
         selected_business = st.selectbox("Select target to pitch:", name_list)
         
-        # 2. Safe Index Lookup (The Fix)
         matching_rows = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()
-        
         if not matching_rows:
             st.warning("⚠️ Loading lead data... please select a business.")
-            st.stop()  # Safely halts the UI here until a valid lead is found
+            st.stop()
             
         lead_idx = matching_rows[0]
         lead_info = st.session_state.master_dataframe.iloc[lead_idx]
@@ -429,7 +431,6 @@ with tab3:
                 else:
                     with st.spinner("AI is analyzing data and writing..."):
                         draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
-                        
                         conn = get_db_conn()
                         conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, lead_info['Email']))
                         conn.commit(); conn.close()
