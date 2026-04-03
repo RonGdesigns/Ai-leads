@@ -395,6 +395,7 @@ with tab1:
 with tab2:
     if st.session_state.master_dataframe is not None:
         df = st.session_state.master_dataframe
+        
         st.markdown("### 🎛️ Command Center")
         
         m1, m2, m3, m4 = st.columns(4)
@@ -416,24 +417,12 @@ with tab2:
         elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
         elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
 
-        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
-        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
-        
-        # --- THE CLICKABLE LINKS FIX ---
-        edited_df = filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels", "Valid Emails Only"], horizontal=True)
-        display_df = df.copy()
-        if filter_option == "Missing SSL": display_df = display_df[display_df['SSL'] == 'Fail']
-        elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
-        elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
-
         # --- THE 'BROKEN LINK' FRONTEND MASK ---
-        # Converts placeholder text to actual nulls so Streamlit disables the hyperlinks
         url_cols = ["Website", "Instagram", "Facebook", "Twitter", "Maps Link"]
         for col in url_cols:
             if col in display_df.columns:
                 display_df[col] = display_df[col].replace(["N/A", "No Website Found"], None)
 
-        # Hide backend columns from the UI
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
         
         edited_df = st.data_editor(
@@ -455,7 +444,6 @@ with tab2:
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
             # --- THE BACKEND RESTORER ---
-            # Converts the empty UI cells safely back to "N/A" for the strict database
             clean_row = row.fillna("N/A")
             
             st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == clean_row['Name'], edited_df.columns] = clean_row.values
@@ -468,7 +456,6 @@ with tab2:
         st.download_button("⬇️ Export Master List to CSV", data=csv_data, file_name="outbound_leads.csv", mime="text/csv")
     else: 
         st.info("👈 Run the scraper in Step 1 to populate your Command Center.")
-
 # --- TAB 3: PITCH & SEND ---
 with tab3:
     if st.session_state.master_dataframe is not None:
