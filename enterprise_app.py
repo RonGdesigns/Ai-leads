@@ -521,18 +521,15 @@ with tab3:
 
         st.markdown("### 🎯 2. Single Target Execution")
         
-        # --- NEW: DYNAMIC SORTING CONTROL ---
+        # --- DYNAMIC SORTING CONTROL ---
         sort_by = st.radio("Sort List By:", ["Name (A-Z)", "Highest Rating", "Most Reviews"], horizontal=True)
         
-        # Create a temporary sorting dataframe so we don't mess up the master data
         sort_df = st.session_state.master_dataframe.copy()
-        
         if sort_by == "Name (A-Z)":
             sort_df['sort_key'] = sort_df['Name'].astype(str).str.lower()
             sort_df = sort_df.sort_values(by='sort_key', ascending=True)
         elif sort_by == "Highest Rating":
             sort_df['sort_key'] = pd.to_numeric(sort_df['Rating'], errors='coerce').fillna(-1)
-            # Sorts by Rating first, then uses Reviews as a tie-breaker
             sort_df = sort_df.sort_values(by=['sort_key', 'Reviews'], ascending=[False, False])
         elif sort_by == "Most Reviews":
             sort_df['sort_key'] = pd.to_numeric(sort_df['Reviews'], errors='coerce').fillna(-1)
@@ -540,22 +537,16 @@ with tab3:
             
         name_list = sort_df['Name'].tolist()
         
-        # --- DYNAMIC DROPDOWN FORMATTER ---
         def format_target_name(name):
-            # Extract the full data row for this specific business
             row = st.session_state.master_dataframe[st.session_state.master_dataframe['Name'] == name].iloc[0]
-            
             status = row['Drafted Email']
             rating = row['Rating']
             reviews = row['Reviews']
             phone = row['Phone']
             
-            # Format the visual elements
             prefix = "✅ " if status in ["✅ SENT", "🔥 REPLIED"] else ""
             rating_str = f"⭐ {rating} ({reviews})" if str(rating) != "N/A" else "⭐ N/A"
             phone_str = f"📞 {phone}" if str(phone) != "N/A" else "📞 N/A"
-            
-            # Combine into a sleek, data-rich string
             return f"{prefix}{name}  |  {rating_str}  |  {phone_str}"
             
         selected_business = st.selectbox("Select target to pitch:", name_list, format_func=format_target_name)
@@ -569,6 +560,18 @@ with tab3:
         lead_info = st.session_state.master_dataframe.iloc[lead_idx]
         current_draft = lead_info['Drafted Email']
 
+        # --- FIX: MOVED TEXT AREA ABOVE THE BUTTONS ---
+        if current_draft and current_draft not in ["✅ SENT", "🔥 REPLIED"]:
+            edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
+            if edited_draft != current_draft:
+                conn = get_db_conn()
+                conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (edited_draft, st.session_state.current_campaign, lead_info['Email']))
+                conn.commit(); conn.close()
+                st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = edited_draft
+                current_draft = edited_draft  # Update the variable so the Send button uses your edits!
+        elif current_draft in ["✅ SENT", "🔥 REPLIED"]: 
+            st.success(f"Status: {current_draft}")
+
         col_gen, col_send = st.columns(2)
         with col_gen:
             if st.button("🤖 Generate Custom Pitch", use_container_width=True):
@@ -576,11 +579,9 @@ with tab3:
                 else:
                     with st.spinner("AI is analyzing data and writing..."):
                         draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)
-                        
                         conn = get_db_conn()
                         conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, lead_info['Email']))
                         conn.commit(); conn.close()
-                        
                         st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
                         st.toast("✅ Pitch Generated!")
                         st.rerun() 
@@ -592,12 +593,15 @@ with tab3:
                     with st.spinner("Dispatching through SMTP..."):
                         try:
                             msg = MIMEMultipart(); msg['From'] = sender_email; msg['To'] = lead_info['Email']; msg['Subject'] = f"Quick question regarding {lead_info['Name']}'s website"
+                            
+                            # This now sends exactly what is in the current_draft (including your edits)
                             msg.attach(MIMEText(current_draft, 'plain'))
+                            
                             server = smtplib.SMTP(smtp_server, int(smtp_port)); server.starttls(); server.login(sender_email, app_password); server.send_message(msg); server.quit()
                             
                             conn = get_db_conn()
                             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                            conn.execute("INSERT INTO logs (date_sent, business_name, email_sent_to) VALUES (?, ?, ?)", (timestamp, lead_info['Name'], lead_info['Email']))
+                            conn.execute("INSERT INTO logs (date_sent, business_name, email_sent_to, email_body) VALUES (?, ?, ?, ?)", (timestamp, lead_info['Name'], lead_info['Email'], current_draft))
                             conn.execute("UPDATE leads SET Drafted_Email='✅ SENT', last_contacted=? WHERE campaign_name=? AND Email=?", (timestamp, st.session_state.current_campaign, lead_info['Email']))
                             conn.commit(); conn.close()
                             
@@ -606,15 +610,6 @@ with tab3:
                             st.balloons()
                             st.rerun()
                         except Exception as e: st.error(f"SMTP Error: {e}")
-
-        if current_draft and current_draft not in ["✅ SENT", "🔥 REPLIED"]:
-            edited_draft = st.text_area("Review and Edit Email:", value=current_draft, height=250)
-            if edited_draft != current_draft:
-                conn = get_db_conn()
-                conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (edited_draft, st.session_state.current_campaign, lead_info['Email']))
-                conn.commit(); conn.close()
-                st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = edited_draft
-        elif current_draft in ["✅ SENT", "🔥 REPLIED"]: st.success(f"Status: {current_draft}")
 
         st.divider()
 
