@@ -23,12 +23,25 @@ st.set_page_config(page_title="Outbound AI | Enterprise CRM", page_icon="🚀", 
 
 st.markdown("""
     <style>
-    /* 1. Global App Background */
+    /* 1. Global App Background & Typography */
     .stApp {
         background-color: #0e1117;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    h1, h2, h3, h4 {
+        letter-spacing: -0.5px;
+        font-weight: 700 !important;
     }
     
-    /* 2. Premium Gradient Buttons */
+    /* 2. Frosted Glass Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: rgba(14, 17, 23, 0.6) !important;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* 3. Premium Gradient Buttons */
     .stButton>button {
         background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
         color: white; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
@@ -39,53 +52,82 @@ st.markdown("""
     .stButton>button:hover { 
         transform: translateY(-2px); 
         box-shadow: 0 6px 15px rgba(75, 108, 183, 0.5); 
-        border: 1px solid rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
         color: white; 
     }
     
-    /* 3. Glassmorphism Metric Cards */
+    /* 4. Glassmorphism Metric Cards */
     div[data-testid="metric-container"] {
-        background: rgba(255, 255, 255, 0.03); 
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.02); 
+        border: 1px solid rgba(255, 255, 255, 0.08);
         padding: 20px; 
         border-radius: 12px; 
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
         backdrop-filter: blur(10px); 
         -webkit-backdrop-filter: blur(10px);
-        transition: transform 0.3s ease, border 0.3s ease;
+        transition: all 0.3s ease;
     }
     div[data-testid="metric-container"]:hover {
-        transform: translateY(-3px); 
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        transform: translateY(-4px); 
+        border: 1px solid rgba(75, 108, 183, 0.5);
+        box-shadow: 0 10px 30px rgba(75, 108, 183, 0.15);
     }
     
-    /* 4. Tab Styling */
+    /* 5. Input Fields & Dropdowns (Glow Effects) */
+    div[data-baseweb="input"] > div, 
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="textarea"] > div {
+        background-color: rgba(255, 255, 255, 0.02) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease !important;
+    }
+    div[data-baseweb="input"] > div:focus-within, 
+    div[data-baseweb="select"] > div:focus-within, 
+    div[data-baseweb="textarea"] > div:focus-within {
+        border-color: #4b6cb7 !important;
+        box-shadow: 0 0 10px rgba(75, 108, 183, 0.4) !important;
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* 6. Rounded Data Tables */
+    [data-testid="stDataFrame"] > div {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* 7. Tab Styling */
     .stTabs [data-baseweb="tab-list"] { gap: 24px; }
     .stTabs [data-baseweb="tab"] { 
         height: 50px; white-space: pre-wrap; background-color: transparent; 
         border-radius: 4px 4px 0px 0px; padding-top: 10px; padding-bottom: 10px; 
+        transition: color 0.3s ease;
     }
     .stTabs [aria-selected="true"] { 
         border-bottom-color: #4b6cb7 !important; 
+        color: #4b6cb7 !important;
     }
     
-    /* 5. Custom Native Scrollbars */
+    /* 8. Custom Native Scrollbars */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #0e1117; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #4b6cb7; }
     
-    /* 6. Clean Inputs (Hide Arrows) */
+    /* 9. Clean Inputs (Hide Arrows) & Expander Polish */
     input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-        -webkit-appearance: none; margin: 0; 
-    }
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number] { -moz-appearance: textfield; }
     
-    /* 7. Subtle Expander Styling */
     .streamlit-expanderHeader {
         background-color: rgba(255,255,255,0.02); 
         border-radius: 8px; 
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.3s ease;
+    }
+    .streamlit-expanderHeader:hover {
+        background-color: rgba(255,255,255,0.05);
     }
     </style>
     """, unsafe_allow_html=True)
