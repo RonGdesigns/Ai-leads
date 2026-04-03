@@ -190,82 +190,43 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
     st.title("⚙️ Engine Room")
     
-   # --- RESTORED & ELABORATED INSTRUCTIONS ---
-
     with st.expander("📖 How to setup and use this tool", expanded=False):
-
         st.markdown("""
-
         ### 🚀 The 4-Step Workflow
-
         **1. Hunt:** Enter a niche and location. The scraper will find local businesses and audit their website tech.
-
         **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight.
-
         **3. Pitch:** Generate custom AI emails and send them individually or in bulk.
-
         **4. Logs & Replies:** View your sent history and use the IMAP scanner to automatically track who replied.
-
-
 
         ---
 
-
-
         ### 🔑 Setup: APIs & Email Connections
-
         To make the engine run, you need to plug in your keys below:
 
-
-
         **1. Google Places API Key (For Hunting)**
-
         * Go to the **[Google Cloud Console](https://console.cloud.google.com/)**.
-
         * Create a project, set up billing, and enable the **Places API (New)**.
-
         * Go to "APIs & Services" > "Credentials" and generate an API key.
 
-
-
         **2. Gemini API Key (For AI Pitching)**
-
         * Go to **[Google AI Studio](https://aistudio.google.com/app/apikey)**.
-
         * Click "Create API key" and generate a free key.
 
-
-
         **3. SMTP & IMAP Servers (For Sending/Tracking)**
-
         * **Gmail Users:** Leave the defaults (`smtp.gmail.com` and `imap.gmail.com`).
-
         * **Other Providers:** Update these with your provider's specific addresses (e.g., `smtp.office365.com` or `smtp.sendgrid.net`).
 
-
-
         **4. Email App Password (CRITICAL)**
-
         * **DO NOT** use your standard email login password.
-
-        * Go to your Google Account (or email provider's) **Security Settings**.
-
-        * Ensure **2-Step Verification** is turned on.
-
-        * Search for **"App Passwords"** and generate a new 16-character password specifically for this software. Paste that into the 'Email Password' box.
-
+        * Ensure **2-Step Verification** is turned on for your account.
+        * Go directly to the **[Google App Passwords page](https://myaccount.google.com/apppasswords)** (this menu is often hidden without the direct link).
+        * Create a new password named "Outbound AI" and paste that 16-character code into the 'Email Password/App Key' box below.
         """)
 
-
-
     # Campaign Manager
-
     st.subheader("📁 Campaign Manager")
-
     conn = sqlite3.connect(DB_FILE)
-
     camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
-
     conn.close()
     
     active_campaign = st.selectbox("Active Campaign:", camp_list)
@@ -369,7 +330,7 @@ with tab1:
                 st.write(f"2️⃣ Found {len(raw_places)} leads. Running high-speed async audits...")
                 urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
                 
-                # Execute the async auditor you built at the top of the file
+                # Execute the async auditor
                 audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
 
                 # --- STEP 3: DUPLICATE SHIELD & SAVE ---
@@ -517,6 +478,7 @@ with tab2:
         st.download_button("⬇️ Export Master List to CSV", data=csv_data, file_name="outbound_leads.csv", mime="text/csv")
     else: 
         st.info("👈 Run the scraper in Step 1 to populate your Command Center.")
+
 # --- TAB 3: PITCH & SEND ---
 with tab3:
     if st.session_state.master_dataframe is not None:
