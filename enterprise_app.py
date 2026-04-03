@@ -18,22 +18,74 @@ import aiohttp
 import random
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
+# --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(page_title="Outbound AI | Enterprise CRM", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
-    .stButton>button {
-        background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-        color: white; border-radius: 8px; border: none; font-weight: bold; padding: 0.5rem 1rem; transition: all 0.3s ease;
+    /* 1. Global App Background */
+    .stApp {
+        background-color: #0e1117;
     }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(75, 108, 183, 0.4); color: white; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: transparent; border-radius: 4px 4px 0px 0px; padding-top: 10px; padding-bottom: 10px; }
-    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-    input[type=number] { -moz-appearance: textfield; }
-    /* Dashboard Metric Cards */
+    
+    /* 2. Premium Gradient Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+        color: white; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+        font-weight: 600; padding: 0.6rem 1.2rem; 
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .stButton>button:hover { 
+        transform: translateY(-2px); 
+        box-shadow: 0 6px 15px rgba(75, 108, 183, 0.5); 
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white; 
+    }
+    
+    /* 3. Glassmorphism Metric Cards */
     div[data-testid="metric-container"] {
-        background-color: #1e1e1e; border: 1px solid #333; padding: 15px; border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03); 
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 20px; 
+        border-radius: 12px; 
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px); 
+        -webkit-backdrop-filter: blur(10px);
+        transition: transform 0.3s ease, border 0.3s ease;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-3px); 
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    /* 4. Tab Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 50px; white-space: pre-wrap; background-color: transparent; 
+        border-radius: 4px 4px 0px 0px; padding-top: 10px; padding-bottom: 10px; 
+    }
+    .stTabs [aria-selected="true"] { 
+        border-bottom-color: #4b6cb7 !important; 
+    }
+    
+    /* 5. Custom Native Scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0e1117; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b6cb7; }
+    
+    /* 6. Clean Inputs (Hide Arrows) */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; margin: 0; 
+    }
+    input[type=number] { -moz-appearance: textfield; }
+    
+    /* 7. Subtle Expander Styling */
+    .streamlit-expanderHeader {
+        background-color: rgba(255,255,255,0.02); 
+        border-radius: 8px; 
     }
     </style>
     """, unsafe_allow_html=True)
