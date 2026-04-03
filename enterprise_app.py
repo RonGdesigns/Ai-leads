@@ -576,16 +576,17 @@ with tab3:
         # --- DYNAMIC SORTING CONTROL ---
         sort_by = st.radio("Sort List By:", ["Name (A-Z)", "Highest Rating", "Most Reviews"], horizontal=True)
         
-        sort_df = st.session_state.master_dataframe.copy()
+        # --- THE FIX: Filter out anyone without an email address first! ---
+        sort_df = st.session_state.master_dataframe[st.session_state.master_dataframe['Email'] != 'N/A'].copy()
+        
+        # Failsafe: Stop the app gracefully if NO one has an email
+        if sort_df.empty:
+            st.warning("⚠️ No leads with valid emails found in this campaign. Go back to Tab 1 to hunt for more!")
+            st.stop()
+            
         if sort_by == "Name (A-Z)":
             sort_df['sort_key'] = sort_df['Name'].astype(str).str.lower()
             sort_df = sort_df.sort_values(by='sort_key', ascending=True)
-        elif sort_by == "Highest Rating":
-            sort_df['sort_key'] = pd.to_numeric(sort_df['Rating'], errors='coerce').fillna(-1)
-            sort_df = sort_df.sort_values(by=['sort_key', 'Reviews'], ascending=[False, False])
-        elif sort_by == "Most Reviews":
-            sort_df['sort_key'] = pd.to_numeric(sort_df['Reviews'], errors='coerce').fillna(-1)
-            sort_df = sort_df.sort_values(by='sort_key', ascending=False)
             
         name_list = sort_df['Name'].tolist()
         
