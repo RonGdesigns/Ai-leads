@@ -19,7 +19,7 @@ import random
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
-st.set_page_config(page_title="Outbound AI | Enterprise CRM", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Sourcing Agent | Enterprise CRM", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
