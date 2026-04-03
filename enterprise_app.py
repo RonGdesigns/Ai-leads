@@ -170,12 +170,12 @@ def check_background_status():
     conn.close()
     return {"is_running": bool(res[0]), "total": res[1], "sent": res[2], "errors": res[3]}
 
-def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, ai_api_key):
+def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobile, pitch_pixels, profession, offer, proof, cta, name, tone, ai_api_key):
     if not ai_api_key: return "⚠️ Please enter your Gemini API Key in the settings sidebar."
     try:
         genai.configure(api_key=ai_api_key)
         model = genai.GenerativeModel('gemini-2.5-flash') 
-        prompt = f"You are a professional {profession}. Write a short, friendly cold email to the owner of {business_name}. Rating: {rating}. Audit: SSL Secure: {audit_data['SSL']}, Mobile Optimized: {audit_data['Mobile']}, Pixels: {audit_data['Pixels']}. Instructions - Pitch SSL: {pitch_ssl}, Pitch Mobile: {pitch_mobile}, Pitch Pixels: {pitch_pixels}. If True, gently mention it as a problem. If all False, congratulate them on a solid business and pivot to offer. Pitch: {offer}. Trust: {proof}. CTA: {cta}. Keep it under 150 words. Sign off as {name}."
+        prompt = f"You are a professional {profession}. Write a short cold email to the owner of {business_name} using a {tone} tone. Rating: {rating}. Audit: SSL Secure: {audit_data['SSL']}, Mobile Optimized: {audit_data['Mobile']}, Pixels: {audit_data['Pixels']}. Instructions - Pitch SSL: {pitch_ssl}, Pitch Mobile: {pitch_mobile}, Pitch Pixels: {pitch_pixels}. If True, gently mention it as a problem. If all False, congratulate them on a solid business and pivot to offer. Pitch: {offer}. Trust: {proof}. CTA: {cta}. Keep it under 150 words. Sign off as {name}."
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
@@ -485,15 +485,29 @@ with tab3:
         with st.expander("👤 1. Persona & Offer Setup (Configure Once)", expanded=True):
             col_a, col_b = st.columns(2)
             with col_a:
-                user_profession = st.text_input("Your Profession:", value="")
-                your_name = st.text_input("Your Name:", value="")
+                user_profession = st.text_input("Your Profession:", value=get_setting("user_profession", ""))
+                your_name = st.text_input("Your Name:", value=get_setting("your_name", ""))
+                
+                # --- NEW TONE/PERSONA SELECTOR ---
+                tone_dropdown = st.selectbox("AI Tone / Persona:", ["Friendly & Conversational", "Direct & Professional", "Consultative & Helpful", "Witty & Humorous", "Type custom tone..."])
+                if tone_dropdown == "Type custom tone...":
+                    email_tone = st.text_input("Enter exact tone:", placeholder="e.g., Aggressive Wolf of Wall Street")
+                else:
+                    email_tone = tone_dropdown
+                    
             with col_b:
-                social_proof = st.text_input("Past Work:", value="")
-                call_to_action = st.text_input("CTA:", value="Open to a 5-min chat?")
-            core_offer = st.text_area("Core Offer:", value="")
+                social_proof = st.text_input("Past Work:", value=get_setting("social_proof", ""))
+                call_to_action = st.text_input("CTA:", value=get_setting("cta", "Open to a 5-min chat?"))
+            core_offer = st.text_area("Core Offer:", value=get_setting("core_offer", ""))
+            
+            # --- SAVE DEFAULTS BUTTON ---
+            if st.button("💾 Save Persona Defaults"):
+                save_setting("user_profession", user_profession); save_setting("your_name", your_name)
+                save_setting("social_proof", social_proof); save_setting("cta", call_to_action)
+                save_setting("core_offer", core_offer)
+                st.toast("✅ Persona & Offer saved globally!")
 
-        # SINGLE EXECUTION
-        st.markdown("### 🎯 Single Target Execution")
+        st.markdown("### 🎯 2. Single Target Execution")
         
         # Extract the list and sort it alphabetically (case-insensitive) for a flawless UX
         name_list = sorted(st.session_state.master_dataframe['Name'].tolist(), key=lambda x: str(x).lower())
@@ -514,8 +528,7 @@ with tab3:
                 if not user_profession or not core_offer: st.warning("⚠️ Fill out your Persona fields above!")
                 else:
                     with st.spinner("AI is analyzing data and writing..."):
-                        draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
-                        conn = get_db_conn()
+                        draft = draft_dynamic_email(lead_info['Name'], lead_info['Rating'], {"SSL": lead_info['SSL'], "Mobile": lead_info['Mobile'], "Pixels": lead_info['Pixels']}, lead_info['Pitch SSL'], lead_info['Pitch Mobile'], lead_info['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)                        conn = get_db_conn()
                         conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, lead_info['Email']))
                         conn.commit(); conn.close()
                         st.session_state.master_dataframe.at[lead_idx, 'Drafted Email'] = draft
@@ -581,8 +594,7 @@ with tab3:
                     
                     for idx, row in st.session_state.master_dataframe.iterrows():
                         if not row['Drafted Email'] or row['Drafted Email'] not in ["✅ SENT", "🔥 REPLIED"]:
-                            draft = draft_dynamic_email(row['Name'], row['Rating'], {"SSL": row['SSL'], "Mobile": row['Mobile'], "Pixels": row['Pixels']}, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, gemini_key)
-                            conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, row['Email']))
+                            draft = draft_dynamic_email(row['Name'], row['Rating'], {"SSL": row['SSL'], "Mobile": row['Mobile'], "Pixels": row['Pixels']}, row['Pitch SSL'], row['Pitch Mobile'], row['Pitch Pixels'], user_profession, core_offer, social_proof, call_to_action, your_name, email_tone, gemini_key)                            conn.execute("UPDATE leads SET Drafted_Email=? WHERE campaign_name=? AND Email=?", (draft, st.session_state.current_campaign, row['Email']))
                             st.session_state.master_dataframe.at[idx, 'Drafted Email'] = draft
                             
                             generated_count += 1
