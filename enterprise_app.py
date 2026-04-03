@@ -43,7 +43,7 @@ DB_FILE = "outbound_crm.db"
 
 def get_db_conn():
     """Returns a DB connection with WAL enabled for high-concurrency."""
-    conn = sqlite3.connect(DB_FILE, timeout=15) # Timeout prevents locking crashes
+    conn = sqlite3.connect(DB_FILE, timeout=15)
     conn.execute('PRAGMA journal_mode=WAL;')
     return conn
 
@@ -52,7 +52,6 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS campaigns (name TEXT PRIMARY KEY)''')
-    # UPGRADED SCHEMA: Added step_number and last_contacted for drip campaigns
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, campaign_name TEXT, Name TEXT, Rating TEXT, Reviews INTEGER, 
                  Website TEXT, Email TEXT, Instagram TEXT, Facebook TEXT, Twitter TEXT, Phone TEXT, Address TEXT, 
@@ -93,7 +92,6 @@ def load_campaign_leads(campaign_name):
 
 # --- 2. ASYNC SCRAPER & API LOGIC ---
 async def async_extract_and_audit(session, url):
-    """Asynchronous website auditor for massive speed gains."""
     if not url or url == 'No Website Found': 
         return {"Website": url, "Email": "N/A", "Instagram": "N/A", "Facebook": "N/A", "Twitter": "N/A", "SSL": "N/A", "Mobile": "N/A", "Pixels": "N/A"}
     try:
@@ -113,7 +111,6 @@ async def async_extract_and_audit(session, url):
     except: return {"Website": url, "Email": "N/A", "Instagram": "N/A", "Facebook": "N/A", "Twitter": "N/A", "SSL": "Error", "Mobile": "Error", "Pixels": "Error"}
 
 async def process_audits_concurrently(urls):
-    """Processes a batch of URLs concurrently."""
     async with aiohttp.ClientSession() as session:
         tasks = [async_extract_and_audit(session, url) for url in urls]
         return await asyncio.gather(*tasks)
@@ -150,7 +147,6 @@ def background_email_worker(targets, sender, password, smtp_server, smtp_port, b
             t_conn.execute("UPDATE bg_status SET errors=? WHERE id=1", (err_count,))
             t_conn.commit(); t_conn.close()
         
-        # ANTI-SPAM JITTER: Randomize delay between base_delay and base_delay * 1.5
         time.sleep(random.uniform(base_delay, base_delay * 1.5))
         
     conn = get_db_conn()
@@ -172,62 +168,137 @@ def draft_dynamic_email(business_name, rating, audit_data, pitch_ssl, pitch_mobi
         return model.generate_content(prompt).text
     except Exception as e: return f"⚠️ AI Error: {e}"
 
-# --- 3. SESSION STATE MANAGEMENT (Upgraded) ---
-# We now track which tab is active so we can switch it programmatically
+# --- 4. SESSION STATE MANAGEMENT (Upgraded) ---
 if 'active_tab_index' not in st.session_state: 
     st.session_state.active_tab_index = 0
+if 'master_dataframe' not in st.session_state: st.session_state.master_dataframe = None
+if 'current_campaign' not in st.session_state: st.session_state.current_campaign = None
 
-# --- 4. SIDEBAR (The Self-Healing Engine) ---
+# --- 5. SIDEBAR (The Self-Healing Engine) ---
 with st.sidebar:
-    # ... (Keep your instructions and API setup code here) ...
+    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
+    st.title("⚙️ Engine Room")
+    
+    with st.expander("📖 How to setup and use this tool", expanded=False):
+        st.markdown("""
+        ### 🚀 The 4-Step Workflow
+        **1. Hunt:** Enter a niche and location. Scraper uses Async to find and audit leads fast.
+        **2. Analyze:** Review your Command Center dashboard.
+        **3. Pitch:** Generate custom AI emails and send them safely.
+        **4. Logs & Replies:** IMAP scanner automatically tracks replies.
+
+        ---
+        ### 🔑 Setup: APIs & Email Connections
+        **1. Google Places API Key (For Hunting)**
+        * **Step 1:** [Google Cloud Console](https://console.cloud.google.com/) -> New Project.
+        * **Step 2:** Billing -> Link a billing account.
+        * **Step 3:** APIs & Services -> Library -> **Places API (New)** -> Enable.
+        * **Step 4:** APIs & Services -> Credentials -> Create API Key.
+
+        **2. Gemini API Key** -> [Google AI Studio](https://aistudio.google.com/app/apikey).
+        
+        **3. Email App Password (CRITICAL)** -> Go to Google Security -> 2-Step Verification -> App Passwords. Use this, not your real password.
+        """)
 
     st.subheader("📁 Campaign Manager")
-    # ... (Keep campaign list fetching code here) ...
+    conn = get_db_conn()
+    camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
+    conn.close()
     
     active_campaign = st.selectbox("Active Campaign:", camp_list)
-    
-    # NEW: SELF-HEALING LOGIC
-    # This ensures that even if we switch tabs, the data is pulled from the DB 
-    # if the campaign name matches or if the dataframe is missing.
+    new_camp = st.text_input("Create New Campaign:", placeholder="e.g., HVAC Texas")
+    if st.button("➕ Add Campaign") and new_camp:
+        conn = get_db_conn()
+        conn.execute("INSERT OR IGNORE INTO campaigns (name) VALUES (?)", (new_camp,))
+        conn.commit(); conn.close()
+        st.rerun()
+
+    # SELF-HEALING LOGIC
     if st.session_state.current_campaign != active_campaign or st.session_state.master_dataframe is None:
         st.session_state.current_campaign = active_campaign
         df = load_campaign_leads(active_campaign)
-        # Only set to None if the DB is actually empty for this campaign
         st.session_state.master_dataframe = df if not df.empty else None
 
-    # ... (Keep Save Settings button code here) ...
+    with st.expander("🔑 Setup APIs & Email"):
+        api_key = st.text_input("Google Places API Key:", type="password", value=get_setting("google_key"))
+        gemini_key = st.text_input("Gemini API Key:", type="password", value=get_setting("gemini_key"))
+        st.divider()
+        smtp_server = st.text_input("SMTP Server:", value=get_setting("smtp_server", "smtp.gmail.com"))
+        smtp_port = st.text_input("SMTP Port:", value=get_setting("smtp_port", "587"))
+        imap_server = st.text_input("IMAP Server:", value=get_setting("imap_server", "imap.gmail.com"))
+        st.divider()
+        sender_email = st.text_input("Email Username:", value=get_setting("sender_email"))
+        app_password = st.text_input("Email Password/App Key:", type="password", value=get_setting("app_password"))
+        
+        if st.button("💾 Save Settings", use_container_width=True):
+            save_setting("google_key", api_key); save_setting("gemini_key", gemini_key)
+            save_setting("smtp_server", smtp_server); save_setting("smtp_port", smtp_port)
+            save_setting("imap_server", imap_server); save_setting("sender_email", sender_email); save_setting("app_password", app_password)
+            st.toast("✅ Infrastructure Saved Locally!")
 
-# --- 6. TABS (With Controller) ---
-# We use st.tabs but wrap them in a way that allows us to force a switch
-tab_names = ["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"]
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.success("🔒 **Privacy First & 100% Local**\n\nYour data is saved securely on your local DB.")
 
-# This bit of logic allows us to "Jump" to a tab by updating active_tab_index
-tab1, tab2, tab3, tab4 = st.tabs(tab_names)
-
-# --- 5. MAIN HEADER ---
+# --- 6. MAIN HEADER ---
 st.markdown("<h1 style='text-align: center;'>🚀 Outbound AI</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: gray; font-size: 1.2rem; margin-bottom: 2rem;'>Active Workspace: <b>{st.session_state.current_campaign}</b></p>", unsafe_allow_html=True)
 
-# --- 6. TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"])
+# --- 7. TABS (With Controller) ---
+tab_names = ["🔍 1. Hunt", "📊 2. Analyze", "🚀 3. Pitch & Send", "📜 4. Campaign Logs"]
+tab1, tab2, tab3, tab4 = st.tabs(tab_names)
 
 # --- TAB 1: HUNT ---
 with tab1:
-    # ... (Keep your Niche/City/Max Leads inputs here) ...
+    col1, col2 = st.columns([3, 1])
+    with col1: niche = st.text_input("Niche / Industry", placeholder="e.g., Roofers, HVAC, Software")
+    with col2:
+        lead_dropdown = st.selectbox("Max Leads", ["5", "10", "20", "50", "100", "250", "Type custom amount..."], index=2)
+        if lead_dropdown == "Type custom amount...": max_results = st.number_input("Enter exact number:", min_value=1, value=15, step=1)
+        else: max_results = int(lead_dropdown)
+            
+    col3, col4, col5 = st.columns([2, 2, 1])
+    with col5:
+        st.markdown("<br>", unsafe_allow_html=True) 
+        is_international = st.checkbox("🌍 International")
+    with col3: city = st.text_input("City (Optional)", placeholder="e.g., Detroit")
+    with col4: region = st.text_input("Country" if is_international else "State", placeholder="e.g., MI")
         
     if st.button("🚀 Launch Scraper", use_container_width=True):
         if not api_key: st.error("⚠️ Please enter your Google Places API Key.")
         elif not niche or not region: st.warning("⚠️ Please fill out Niche and State/Country.")
         else:
             search_query = f"{niche} in {city}, {region}" if city else f"{niche} in {region}"
-            with st.status(f"🚀 Launching Async Engine...", expanded=True) as status:
-                # ... (Keep your Scraper/Async extraction logic here) ...
+            with st.status(f"🚀 Launching Async Engine for '{search_query}'...", expanded=True) as status:
+                st.write("1️⃣ Querying Google Maps API...")
+                url = 'https://places.googleapis.com/v1/places:searchText'
+                headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,nextPageToken'}
                 
-                # --- [REPLACE THE SAVE SECTION WITH THIS BATCH LOGIC] ---
+                raw_places = []
+                page_token = ""
+                
+                while len(raw_places) < max_results:
+                    payload = {'textQuery': search_query, 'pageSize': 20}
+                    if page_token: payload['pageToken'] = page_token
+                    res = requests.post(url, headers=headers, json=payload)
+                    if not res.ok: break
+                    data = res.json()
+                    
+                    for place in data.get('places', []):
+                        if place.get('businessStatus') == 'OPERATIONAL':
+                            raw_places.append(place)
+                        if len(raw_places) >= max_results: break
+                    
+                    page_token = data.get('nextPageToken')
+                    if not page_token: break
+                
+                st.write(f"2️⃣ Found {len(raw_places)} businesses. Launching Async Website Auditors...")
+                
+                urls_to_audit = [p.get('websiteUri', 'No Website Found') for p in raw_places]
+                audit_results = asyncio.run(process_audits_concurrently(urls_to_audit))
+                
                 st.write("3️⃣ Processing and Saving to Database...")
                 conn = get_db_conn()
                 
-                # Define schema keys
                 sample_keys = [
                     "campaign_name", "Name", "Rating", "Reviews", "Website", "Email", 
                     "Instagram", "Facebook", "Twitter", "Phone", "Address", "Maps_Link", 
@@ -244,7 +315,6 @@ with tab1:
                     display_name = place.get('displayName', {})
                     biz_name = display_name.get('text', 'N/A') if isinstance(display_name, dict) else str(display_name)
                     
-                    # Strict Type Casting
                     lead_row = (
                         str(st.session_state.current_campaign), str(biz_name), str(place.get('rating', 'N/A')),
                         int(place.get('userRatingCount', 0)), str(audit.get("Website", "N/A")), str(audit.get("Email", "N/A")),
@@ -258,17 +328,16 @@ with tab1:
                 try:
                     conn.executemany(sql, batch_data)
                     conn.commit()
+                except Exception as e:
+                    st.error(f"Database Write Error: {e}")
                 finally:
                     conn.close()
                 
-                # RE-LOAD DATA INTO STATE
-                # This ensures Tab 2 sees it immediately
                 df = load_campaign_leads(st.session_state.current_campaign)
                 st.session_state.master_dataframe = df
                 
                 status.update(label=f"✅ Async Extraction Complete. Saved {len(batch_data)} leads.", state="complete")
                 
-                # THE TELEPORTER: Switch state and rerun to force the tab change
                 st.toast("🎉 Hunt Complete! Moving to Analyze...")
                 time.sleep(1)
                 st.rerun()
@@ -280,13 +349,11 @@ with tab2:
         
         st.markdown("### 🎛️ Command Center")
         
-        # UI: Metric Funnel
         m1, m2, m3, m4 = st.columns(4)
         total_leads = len(df)
         emails_found = len(df[df['Email'] != 'N/A'])
         m1.metric("Total Prospects", total_leads)
         
-        # Safe math to prevent division by zero errors
         match_percentage = int((emails_found / total_leads) * 100) if total_leads > 0 else 0
         m2.metric("Valid Emails Found", emails_found, f"{match_percentage}% Match")
         
@@ -301,11 +368,9 @@ with tab2:
         elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
         elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
 
-        # Hide internal columns for cleaner UI
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
         edited_df = st.data_editor(display_df[cols_to_show], use_container_width=True, hide_index=True)
         
-        # Save edits to the database
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
             st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == row['Name'], edited_df.columns] = row.values
@@ -319,11 +384,9 @@ with tab2:
     else: 
         st.info("👈 Run the scraper in Step 1 to populate your Command Center.")
 
-# --- TAB 3: PITCH & SEND (Progressive Disclosure) ---
+# --- TAB 3: PITCH & SEND ---
 with tab3:
     if st.session_state.master_dataframe is not None:
-        
-        # UI Upgrade: Hide the setup inside an expander so it doesn't clutter the sending flow
         with st.expander("👤 1. Persona & Offer Setup (Configure Once)", expanded=True):
             col_a, col_b = st.columns(2)
             with col_a:
@@ -334,7 +397,6 @@ with tab3:
                 call_to_action = st.text_input("CTA:", value="Open to a 5-min chat?")
             core_offer = st.text_area("Core Offer:", value="")
 
-        # SINGLE EXECUTION
         st.markdown("### 🎯 2. Single Target Execution")
         selected_business = st.selectbox("Select target to pitch:", st.session_state.master_dataframe['Name'].tolist())
         lead_idx = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()[0]
@@ -361,7 +423,6 @@ with tab3:
                 elif lead_info['Email'] == "N/A": st.error("⚠️ No email scraped.")
                 else:
                     with st.spinner("Dispatching through SMTP..."):
-                        # Uses standard SMTP locally
                         try:
                             msg = MIMEMultipart(); msg['From'] = sender_email; msg['To'] = lead_info['Email']; msg['Subject'] = f"Quick question regarding {lead_info['Name']}'s website"
                             msg.attach(MIMEText(current_draft, 'plain'))
@@ -390,7 +451,6 @@ with tab3:
 
         st.divider()
 
-        # BULK EXECUTION
         st.markdown("### ⚡ 3. Background Mass Sender")
         bg_status = check_background_status()
         if bg_status["is_running"]:
