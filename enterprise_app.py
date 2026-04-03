@@ -451,6 +451,11 @@ with tab2:
 
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
         
+        # --- ADD VISUAL CHECKMARKS TO TAB 2 ---
+        display_df['Name'] = display_df.apply(lambda r: f"✅ {r['Name']}" if r['Drafted Email'] in ['✅ SENT', '🔥 REPLIED'] else r['Name'], axis=1)
+
+        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
+        
         edited_df = st.data_editor(
             display_df[cols_to_show], 
             use_container_width=True, 
@@ -469,12 +474,15 @@ with tab2:
         
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
-            # --- THE BACKEND RESTORER ---
+            # --- THE BACKEND RESTORER (WITH SAFE NAME STRIPPING) ---
             clean_row = row.fillna("N/A")
+            original_name = clean_row['Name'].replace("✅ ", "") # Strip the checkmark for DB safety
             
-            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == clean_row['Name'], edited_df.columns] = clean_row.values
+            # Safely update ONLY the editable checkbox columns in the master dataframe
+            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == original_name, ['Pitch SSL', 'Pitch Mobile', 'Pitch Pixels']] = [clean_row['Pitch SSL'], clean_row['Pitch Mobile'], clean_row['Pitch Pixels']]
+            
             conn.execute("UPDATE leads SET Pitch_SSL=?, Pitch_Mobile=?, Pitch_Pixels=? WHERE campaign_name=? AND Name=?", 
-                         (int(clean_row['Pitch SSL']), int(clean_row['Pitch Mobile']), int(clean_row['Pitch Pixels']), st.session_state.current_campaign, clean_row['Name']))
+                         (int(clean_row['Pitch SSL']), int(clean_row['Pitch Mobile']), int(clean_row['Pitch Pixels']), st.session_state.current_campaign, original_name))
         conn.commit()
         conn.close()
 
@@ -512,10 +520,16 @@ with tab3:
                 st.toast("✅ Persona & Offer saved globally!")
 
         st.markdown("### 🎯 2. Single Target Execution")
-        
-        # Extract the list and sort it alphabetically (case-insensitive) for a flawless UX
         name_list = sorted(st.session_state.master_dataframe['Name'].tolist(), key=lambda x: str(x).lower())
-        selected_business = st.selectbox("Select target to pitch:", name_list)
+        
+        # --- DYNAMIC DROPDOWN FORMATTER ---
+        def format_target_name(name):
+            status = st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == name, 'Drafted Email'].values[0]
+            if status in ["✅ SENT", "🔥 REPLIED"]:
+                return f"✅ {name}"
+            return name
+            
+        selected_business = st.selectbox("Select target to pitch:", name_list, format_func=format_target_name)
         
         matching_rows = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()
         if not matching_rows:
