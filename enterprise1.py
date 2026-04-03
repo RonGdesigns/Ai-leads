@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 
 # --- 0. PAGE CONFIGURATION & CUSTOM CSS ---
-st.set_page_config(page_title="SortingSource | Enterprise Intelligence", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="sortingsource | Enterprise Intelligence", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
@@ -198,7 +198,7 @@ def check_activation():
                                 time.sleep(2)
                                 st.rerun()
                             else:
-                                st.error("❌ Invalid License Key. Please check your purchase receipt.")
+                                st.error(f"❌ Gumroad Error: {data.get('message', 'Unknown Error')} | Full Response: {data}")
                         except Exception as e:
                             st.error("⚠️ Could not connect to the licensing server. Check your internet connection.")
                             
