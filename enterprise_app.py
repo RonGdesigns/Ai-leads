@@ -48,19 +48,33 @@ def get_db_conn():
     return conn
 
 def init_db():
-    # Use the connection helper that has the 15s timeout
-    conn = get_db_conn() 
-    try:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
-        # ... rest of your CREATE TABLE statements ...
-        c.execute("INSERT OR IGNORE INTO campaigns (name) VALUES ('Default Campaign')")
-        c.execute("INSERT OR IGNORE INTO bg_status (id, is_running, total, sent, errors) VALUES (1, 0, 0, 0, 0)")
-        conn.commit()
-    except Exception as e:
-        st.error(f"Database Initialization Error: {e}")
-    finally:
-        conn.close()
+    conn = get_db_conn()
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS campaigns (name TEXT PRIMARY KEY)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS leads 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, campaign_name TEXT, Name TEXT, Rating TEXT, Reviews INTEGER, 
+                 Website TEXT, Email TEXT, Instagram TEXT, Facebook TEXT, Twitter TEXT, Phone TEXT, Address TEXT, 
+                 Maps_Link TEXT, SSL TEXT, Mobile TEXT, Pixels TEXT, Pitch_SSL BOOLEAN, Pitch_Mobile BOOLEAN, 
+                 Pitch_Pixels BOOLEAN, Drafted_Email TEXT, step_number INTEGER DEFAULT 1, last_contacted TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS logs (date_sent TEXT, business_name TEXT, email_sent_to TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS bg_status (id INTEGER PRIMARY KEY, is_running BOOLEAN, total INTEGER, sent INTEGER, errors INTEGER)''')
+    
+    # --- ENTERPRISE AUTO-MIGRATION ---
+    # Check if the old table exists without the new columns and inject them safely
+    c.execute("PRAGMA table_info(leads)")
+    columns = [col[1] for col in c.fetchall()]
+    
+    if "step_number" not in columns:
+        c.execute("ALTER TABLE leads ADD COLUMN step_number INTEGER DEFAULT 1")
+    if "last_contacted" not in columns:
+        c.execute("ALTER TABLE leads ADD COLUMN last_contacted TEXT")
+    # ---------------------------------
+    
+    c.execute("INSERT OR IGNORE INTO campaigns (name) VALUES ('Default Campaign')")
+    c.execute("INSERT OR IGNORE INTO bg_status (id, is_running, total, sent, errors) VALUES (1, 0, 0, 0, 0)")
+    conn.commit()
+    conn.close()
 
 init_db()
 
