@@ -420,28 +420,47 @@ with tab2:
         cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
         
         # --- THE CLICKABLE LINKS FIX ---
+        edited_df = filter_option = st.radio("Quick Filter:", ["All Leads", "Missing SSL", "Missing Pixels", "Valid Emails Only"], horizontal=True)
+        display_df = df.copy()
+        if filter_option == "Missing SSL": display_df = display_df[display_df['SSL'] == 'Fail']
+        elif filter_option == "Missing Pixels": display_df = display_df[display_df['Pixels'] == 'Fail']
+        elif filter_option == "Valid Emails Only": display_df = display_df[display_df['Email'] != 'N/A']
+
+        # --- THE 'BROKEN LINK' FRONTEND MASK ---
+        # Converts placeholder text to actual nulls so Streamlit disables the hyperlinks
+        url_cols = ["Website", "Instagram", "Facebook", "Twitter", "Maps Link"]
+        for col in url_cols:
+            if col in display_df.columns:
+                display_df[col] = display_df[col].replace(["N/A", "No Website Found"], None)
+
+        # Hide backend columns from the UI
+        cols_to_show = [c for c in display_df.columns if c not in ['Drafted Email', 'step number', 'last contacted']]
+        
         edited_df = st.data_editor(
             display_df[cols_to_show], 
             use_container_width=True, 
             hide_index=True,
             column_config={
-                "Website": st.column_config.LinkColumn(),
-                "Instagram": st.column_config.LinkColumn(),
-                "Facebook": st.column_config.LinkColumn(),
-                "Twitter": st.column_config.LinkColumn(),
-                "Maps Link": st.column_config.LinkColumn(),
+                "Website": st.column_config.LinkColumn("Website"),
+                "Instagram": st.column_config.LinkColumn("Instagram"),
+                "Facebook": st.column_config.LinkColumn("Facebook"),
+                "Twitter": st.column_config.LinkColumn("Twitter"),
+                "Maps Link": st.column_config.LinkColumn("Maps Link"),
                 "Pitch SSL": st.column_config.CheckboxColumn("Pitch SSL?"),
                 "Pitch Mobile": st.column_config.CheckboxColumn("Pitch Mobile?"),
                 "Pitch Pixels": st.column_config.CheckboxColumn("Pitch Pixels?")
             }
         )
-        # -------------------------------
         
         conn = get_db_conn()
         for index, row in edited_df.iterrows():
-            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == row['Name'], edited_df.columns] = row.values
+            # --- THE BACKEND RESTORER ---
+            # Converts the empty UI cells safely back to "N/A" for the strict database
+            clean_row = row.fillna("N/A")
+            
+            st.session_state.master_dataframe.loc[st.session_state.master_dataframe['Name'] == clean_row['Name'], edited_df.columns] = clean_row.values
             conn.execute("UPDATE leads SET Pitch_SSL=?, Pitch_Mobile=?, Pitch_Pixels=? WHERE campaign_name=? AND Name=?", 
-                         (int(row['Pitch SSL']), int(row['Pitch Mobile']), int(row['Pitch Pixels']), st.session_state.current_campaign, row['Name']))
+                         (int(clean_row['Pitch SSL']), int(clean_row['Pitch Mobile']), int(clean_row['Pitch Pixels']), st.session_state.current_campaign, clean_row['Name']))
         conn.commit()
         conn.close()
 
