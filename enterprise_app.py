@@ -520,7 +520,25 @@ with tab3:
                 st.toast("✅ Persona & Offer saved globally!")
 
         st.markdown("### 🎯 2. Single Target Execution")
-        name_list = sorted(st.session_state.master_dataframe['Name'].tolist(), key=lambda x: str(x).lower())
+        
+        # --- NEW: DYNAMIC SORTING CONTROL ---
+        sort_by = st.radio("Sort List By:", ["Name (A-Z)", "Highest Rating", "Most Reviews"], horizontal=True)
+        
+        # Create a temporary sorting dataframe so we don't mess up the master data
+        sort_df = st.session_state.master_dataframe.copy()
+        
+        if sort_by == "Name (A-Z)":
+            sort_df['sort_key'] = sort_df['Name'].astype(str).str.lower()
+            sort_df = sort_df.sort_values(by='sort_key', ascending=True)
+        elif sort_by == "Highest Rating":
+            sort_df['sort_key'] = pd.to_numeric(sort_df['Rating'], errors='coerce').fillna(-1)
+            # Sorts by Rating first, then uses Reviews as a tie-breaker
+            sort_df = sort_df.sort_values(by=['sort_key', 'Reviews'], ascending=[False, False])
+        elif sort_by == "Most Reviews":
+            sort_df['sort_key'] = pd.to_numeric(sort_df['Reviews'], errors='coerce').fillna(-1)
+            sort_df = sort_df.sort_values(by='sort_key', ascending=False)
+            
+        name_list = sort_df['Name'].tolist()
         
         # --- DYNAMIC DROPDOWN FORMATTER ---
         def format_target_name(name):
