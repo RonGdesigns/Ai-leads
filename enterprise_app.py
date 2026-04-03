@@ -190,18 +190,82 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=40)
     st.title("⚙️ Engine Room")
     
+   # --- RESTORED & ELABORATED INSTRUCTIONS ---
+
     with st.expander("📖 How to setup and use this tool", expanded=False):
+
         st.markdown("""
+
         ### 🚀 The 4-Step Workflow
-        **1. Hunt:** Enter a niche and location. Scraper uses Async to find and audit leads fast.
-        **2. Analyze:** Review your Command Center dashboard.
-        **3. Pitch:** Generate custom AI emails and send them safely.
-        **4. Logs & Replies:** IMAP scanner automatically tracks replies.
+
+        **1. Hunt:** Enter a niche and location. The scraper will find local businesses and audit their website tech.
+
+        **2. Analyze:** Review the dashboard. Use the checkboxes to select which technical failures you want to highlight.
+
+        **3. Pitch:** Generate custom AI emails and send them individually or in bulk.
+
+        **4. Logs & Replies:** View your sent history and use the IMAP scanner to automatically track who replied.
+
+
+
+        ---
+
+
+
+        ### 🔑 Setup: APIs & Email Connections
+
+        To make the engine run, you need to plug in your keys below:
+
+
+
+        **1. Google Places API Key (For Hunting)**
+
+        * Go to the **[Google Cloud Console](https://console.cloud.google.com/)**.
+
+        * Create a project, set up billing, and enable the **Places API (New)**.
+
+        * Go to "APIs & Services" > "Credentials" and generate an API key.
+
+
+
+        **2. Gemini API Key (For AI Pitching)**
+
+        * Go to **[Google AI Studio](https://aistudio.google.com/app/apikey)**.
+
+        * Click "Create API key" and generate a free key.
+
+
+
+        **3. SMTP & IMAP Servers (For Sending/Tracking)**
+
+        * **Gmail Users:** Leave the defaults (`smtp.gmail.com` and `imap.gmail.com`).
+
+        * **Other Providers:** Update these with your provider's specific addresses (e.g., `smtp.office365.com` or `smtp.sendgrid.net`).
+
+
+
+        **4. Email App Password (CRITICAL)**
+
+        * **DO NOT** use your standard email login password.
+
+        * Go to your Google Account (or email provider's) **Security Settings**.
+
+        * Ensure **2-Step Verification** is turned on.
+
+        * Search for **"App Passwords"** and generate a new 16-character password specifically for this software. Paste that into the 'Email Password' box.
+
         """)
 
+
+
+    # Campaign Manager
+
     st.subheader("📁 Campaign Manager")
-    conn = get_db_conn()
+
+    conn = sqlite3.connect(DB_FILE)
+
     camp_list = [row[0] for row in conn.execute("SELECT name FROM campaigns").fetchall()]
+
     conn.close()
     
     active_campaign = st.selectbox("Active Campaign:", camp_list)
