@@ -137,9 +137,9 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 0.5 ENTERPRISE LICENSING ENGINE ---
-PRODUCT_ID = "aetlq" # <-- PASTE YOUR GUMROAD ID HERE
+PRODUCT_PERMALINK = "SourcingAgent" 
 LICENSE_FILE = "license.dat"
-SECRET_SALT = "OutboundAI_Enterprise_2024" # Do not change this after you launch
+SECRET_SALT = "OutboundAI_Enterprise_2024"
 
 def get_hardware_id():
     """Grabs a unique identifier from the user's computer hardware."""
@@ -181,12 +181,12 @@ def check_activation():
                     st.error("Please enter a key.")
                 else:
                     with st.spinner("Verifying with Gumroad..."):
-                        # Ping Gumroad API
+                       # Ping Gumroad API
                         url = "https://api.gumroad.com/v2/licenses/verify"
                         
-                        # --- THE API UPDATE IS HERE ---
-                        payload = {"product_id": PRODUCT_ID, "license_key": input_key}
-                        # ------------------------------
+                        # --- USE PERMALINK INSTEAD OF ID ---
+                        payload = {"product_permalink": PRODUCT_PERMALINK, "license_key": input_key}
+                        # -----------------------------------
                         
                         try:
                             res = requests.post(url, data=payload)
