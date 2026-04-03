@@ -398,8 +398,19 @@ with tab3:
             core_offer = st.text_area("Core Offer:", value="")
 
         st.markdown("### 🎯 2. Single Target Execution")
-        selected_business = st.selectbox("Select target to pitch:", st.session_state.master_dataframe['Name'].tolist())
-        lead_idx = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()[0]
+        
+        # 1. Safely handle the selectbox
+        name_list = st.session_state.master_dataframe['Name'].tolist()
+        selected_business = st.selectbox("Select target to pitch:", name_list)
+        
+        # 2. Safe Index Lookup (The Fix)
+        matching_rows = st.session_state.master_dataframe.index[st.session_state.master_dataframe['Name'] == selected_business].tolist()
+        
+        if not matching_rows:
+            st.warning("⚠️ Loading lead data... please select a business.")
+            st.stop()  # Safely halts the UI here until a valid lead is found
+            
+        lead_idx = matching_rows[0]
         lead_info = st.session_state.master_dataframe.iloc[lead_idx]
         current_draft = lead_info['Drafted Email']
 
