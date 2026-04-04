@@ -257,12 +257,19 @@ check_activation()
 # --- 1. SQLITE DATABASE ENGINE (Enterprise WAL Migration) ---
 DB_FILE = "outbound_crm.db"
 
+# --- 1. SQLITE DATABASE ENGINE (Cloud Safe Patch) ---
+DB_FILE = "outbound_crm.db"
+
 def get_db_conn():
-    """Returns a DB connection with WAL enabled for high-concurrency."""
+    """Returns a DB connection, gracefully failing WAL if on a network/cloud drive."""
     conn = sqlite3.connect(DB_FILE, timeout=15)
-    conn.execute('PRAGMA journal_mode=WAL;')
+    try:
+        conn.execute('PRAGMA journal_mode=WAL;')
+    except sqlite3.OperationalError:
+        pass # If on Streamlit Cloud, fallback to standard journal mode
     return conn
 
+@st.cache_resource # CRITICAL: Tells Streamlit to only run this ONCE per app boot
 def init_db():
     conn = get_db_conn()
     c = conn.cursor()
@@ -295,7 +302,9 @@ def init_db():
     
     conn.commit()
     conn.close()
+    return True # Required for st.cache_resource
 
+# Run the cached initialization
 init_db()
 
 
