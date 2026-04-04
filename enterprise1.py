@@ -193,7 +193,6 @@ def check_activation():
                         current_uses = 0
                         
                         # --- THE TIER-SNIFFER ---
-                        # The app tries the key against all 3 products automatically
                         for prod_id, max_seats in GUMROAD_PRODUCTS.items():
                             payload = {"product_id": prod_id, "license_key": input_key}
                             try:
@@ -225,30 +224,8 @@ def check_activation():
                             st.rerun()
                         else:
                             st.error("❌ Invalid License Key. Please check your purchase receipt.")
-                                # --------------------------------------
-                                
-                                # Gumroad says it's real! Lock it to the hardware.
-                                final_hash = generate_license_hash(input_key, hw_id)
-                                
-                                with open(LICENSE_FILE, "w") as f:
-                                    json.dump({"key": input_key, "hash": final_hash}, f)
-                                    
-                                st.success(f"✅ Activation Successful! (Seat {uses} of 10)")
-                                time.sleep(2)
-                                st.rerun()
-                                
-                                with open(LICENSE_FILE, "w") as f:
-                                    json.dump({"key": input_key, "hash": final_hash}, f)
-                                    
-                                st.success("✅ Activation Successful! Rebooting engine...")
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error(f"❌ Gumroad Error: {data.get('message', 'Unknown Error')} | Full Response: {data}")
-                        except Exception as e:
-                            st.error("⚠️ Could not connect to the licensing server. Check your internet connection.")
                             
-        st.stop() # CRITICAL: This stops the rest of the CRM from loading if they aren't activated!
+    st.stop() # CRITICAL: This stops the rest of the CRM from loading if they aren't activated!
 
 # Run the security check immediately
 check_activation()
